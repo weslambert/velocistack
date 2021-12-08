@@ -1,0 +1,86 @@
+version: '3'
+services:
+  velociraptor:
+    container_name: velociraptor
+    #image: wlambert/velociraptor
+    build:
+      context: ./velociraptor
+      dockerfile: Dockerfile
+    volumes:
+      - ./velociraptor_data:/velociraptor/:rw
+      - ./velociraptor/custom:/custom:ro
+    environment:
+      - VELO_USER=${VELO_USER}
+      - VELO_PASSWORD=${VELO_PASSWORD}
+      - VELO_ROLE=${VELO_ROLE}
+      - VELO_SERVER_URL=${VELO_SERVER_URL}
+      - VELO_FRONTEND_HOSTNAME=${VELO_FRONTEND_HOSTNAME}
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8889:8889"
+    restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.external-url=http://0.0.0.0/prometheus
+      - --web.route-prefix=/
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - cadvisor
+  cadvisor:
+    image: google/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - 8080:8080
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+  pushgateway:
+    image: prom/pushgateway
+    container_name: pushgateway
+    ports:
+      - 9091:9091
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    expose:
+      - 9100
+    depends_on:
+      - velociraptor
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - 3000:3000
+    environment:
+      - GF_SERVER_ROOT_URL=http://0.0.0.0/grafana
+      - GF_AUTH_ANONYMOUS_ENABLED=true  
+      #- GF_SECURITY_ADMIN_PASSWORD=password
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - cadvisor
+  #zinc:
+  #  container_name: zinc
+  #  build:
+  #    context: ./zinc
+  #    dockerfile: Dockerfile
+  #  volumes:
+  #    - ./zinc/data:/data:rw
+  #  environment:
+  #    - DATA_PATH=/data 
+  #    - FIRST_ADMIN_USER=${FIRST_ADMIN_USER}
+  #    - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
+  #  ports:
+  #    - "4080:4080"
+  #  restart: unless-stopped

@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+- name: Prometheus
+  type: prometheus
+  access: direct
+  orgId: 1
+  url: http://prometheus:9090
+  access: server
+  isDefault: true
+  version: 1
+  editable: false
