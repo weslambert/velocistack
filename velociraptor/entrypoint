@@ -15,6 +15,8 @@ PROMETHEUS_URL="http://prometheus:9090/"
 PROMETHEUS_ROUTE="/prometheus/"
 ZINC_URL="http://zinc:4080/"
 ZINC_ROUTE="/zinc/"
+KIBANA_ROUTE="/kibana/"
+KIBANA_URL="http://kibana:5601/"
 
 # Move binaries into place
 cp /opt/velociraptor/linux/velociraptor . && chmod +x velociraptor
@@ -24,10 +26,10 @@ mkdir -p $CLIENT_DIR/windows && rsync -a /opt/velociraptor/windows/velociraptor_
 
 # If no existing server config, set it up
 if [ ! -f server.config.yaml ]; then
-	./velociraptor config generate > server.config.yaml --merge '{"Frontend":{"public_path":"'$PUBLIC_PATH'", "hostname":"'$VELO_FRONTEND_HOSTNAME'"},"API":{"bind_address":"'$BIND_ADDRESS'"},"GUI":{"bind_address":"'$BIND_ADDRESS'","reverse_proxy": [{"route": "'$CYBERCHEF_ROUTE'","url": "'$CYBERCHEF_URL'","require_auth": true},{"route": "'$GRAFANA_ROUTE'","url": "'$GRAFANA_URL'", "require_auth": true}, {"route": "'$PROMETHEUS_ROUTE'","url": "'$PROMETHEUS_URL'", "require_auth": true}]},"Monitoring":{"bind_address":"'$BIND_ADDRESS'"},"Logging":{"output_directory":"'$LOG_DIR'","separate_logs_per_component":true},"Client":{"server_urls":["'$VELO_SERVER_URL'"],"use_self_signed_ssl":true}, "Datastore":{"location":"'$DATASTORE_LOCATION'", "filestore_directory":"'$FILESTORE_DIRECTORY'"}}'
+        ./velociraptor config generate > server.config.yaml --merge '{"Frontend":{"public_path":"'$PUBLIC_PATH'", "hostname":"'$VELO_FRONTEND_HOSTNAME'"},"API":{"bind_address":"'$BIND_ADDRESS'"},"GUI":{"bind_address":"'$BIND_ADDRESS'","reverse_proxy": [{"route": "'$CYBERCHEF_ROUTE'","url": "'$CYBERCHEF_URL'","require_auth": true},{"route": "'$GRAFANA_ROUTE'","url": "'$GRAFANA_URL'", "require_auth": true}, {"route": "'$PROMETHEUS_ROUTE'","url": "'$PROMETHEUS_URL'", "require_auth": true}, {"route": "'$KIBANA_ROUTE'","url": "'$KIBANA_URL'", "require_auth": true}]},"Monitoring":{"bind_address":"'$BIND_ADDRESS'"},"Logging":{"output_directory":"'$LOG_DIR'","separate_logs_per_component":true},"Client":{"server_urls":["'$VELO_SERVER_URL'"],"use_self_signed_ssl":true}, "Datastore":{"location":"'$DATASTORE_LOCATION'", "filestore_directory":"'$FILESTORE_DIRECTORY'"}}'
         #sed -i "s#https://localhost:8000/#$VELO_CLIENT_URL#" server.config.yaml
-	sed -i 's#/tmp/velociraptor#.#'g server.config.yaml
-	./velociraptor --config server.config.yaml user add $VELO_USER $VELO_PASSWORD --role $VELO_ROLE
+        sed -i 's#/tmp/velociraptor#.#'g server.config.yaml
+        ./velociraptor --config server.config.yaml user add $VELO_USER $VELO_PASSWORD --role $VELO_ROLE
 fi
 
 # Re-generate client config in case server config changed
