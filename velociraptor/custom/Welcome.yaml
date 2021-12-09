@@ -1,6 +1,6 @@
 name: Custom.Server.Internal.Welcome
 description: |
-  TEST: This is the welcome screen in the Velociraptor GUI. You can
+  This is the welcome screen in the Velociraptor GUI. You can
   customize this screen by editing this artifact.
 
   When editing the artifact in the main `View Artifacts` screen you
