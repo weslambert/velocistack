@@ -27,6 +27,7 @@ reports:
       
       * <a href="/cyberchef">Cyberchef</a>
       * <a href="/grafana">Grafana</a>
+      * <a herf="/kibana">Kibana</a>"
       * <a href="/prometheus">Prometheus</a>
 
       ## Common tasks:
