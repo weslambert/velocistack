@@ -70,6 +70,7 @@ services:
     depends_on:
       - prometheus
       - cadvisor
+  
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.15.2
     container_name: elasticsearch
@@ -85,23 +86,32 @@ services:
         hard: 65536
     cap_add:
       - IPC_LOCK
-    volumes:
-      - elasticsearch-data:/usr/share/elasticsearch/data
     ports:
       - 9200:9200
       - 9300:9300
+
   kibana:
     container_name: kibana
     image: docker.elastic.co/kibana/kibana:7.15.2
     environment:
+      - xpack.security.enabled=false
+      - xpack.spaces.enabled=false
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - SERVER_NAME=https://${KIBANA_SERVER_NAME}/kibana
       - SERVER_BASEPATH=/kibana
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_DEFAULTROUTE=/app/discover
+      - SERVER_DEFAULTINDEX=artifact*
+      - TELEMETRY_ENABLED=false
     ports:
       - 5601:5601
     depends_on:
       - elasticsearch
-  #zinc:
+
+volumes:
+  elasticsearch-data:
+    driver: local
+
+#zinc:
   #  container_name: zinc
   #  build:
   #    context: ./zinc
