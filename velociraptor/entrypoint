@@ -26,10 +26,11 @@ mkdir -p $CLIENT_DIR/windows && rsync -a /opt/velociraptor/windows/velociraptor_
 
 # If no existing server config, set it up
 if [ ! -f server.config.yaml ]; then
-        ./velociraptor config generate > server.config.yaml --merge '{"Frontend":{"public_path":"'$PUBLIC_PATH'", "hostname":"'$VELO_FRONTEND_HOSTNAME'"},"API":{"bind_address":"'$BIND_ADDRESS'"},"GUI":{"bind_address":"'$BIND_ADDRESS'","reverse_proxy": [{"route": "'$CYBERCHEF_ROUTE'","url": "'$CYBERCHEF_URL'","require_auth": true},{"route": "'$GRAFANA_ROUTE'","url": "'$GRAFANA_URL'", "require_auth": true}, {"route": "'$PROMETHEUS_ROUTE'","url": "'$PROMETHEUS_URL'", "require_auth": true}, {"route": "'$KIBANA_ROUTE'","url": "'$KIBANA_URL'", "require_auth": true}]},"Monitoring":{"bind_address":"'$BIND_ADDRESS'"},"Logging":{"output_directory":"'$LOG_DIR'","separate_logs_per_component":true},"Client":{"server_urls":["'$VELO_SERVER_URL'"],"use_self_signed_ssl":true}, "Datastore":{"location":"'$DATASTORE_LOCATION'", "filestore_directory":"'$FILESTORE_DIRECTORY'"}}'
+	./velociraptor config generate > server.config.yaml --merge '{"Frontend":{"public_path":"'$PUBLIC_PATH'", "hostname":"'$VELO_FRONTEND_HOSTNAME'", "default_server_monitoring_artifacts" : ["Custom.Elastic.Flows.Upload"]},"API":{"bind_address":"'$BIND_ADDRESS'"},"GUI":{"bind_address":"'$BIND_ADDRESS'","reverse_proxy": [{"route": "'$CYBERCHEF_ROUTE'","url": "'$CYBERCHEF_URL'","require_auth": true},{"route": "'$GRAFANA_ROUTE'","url": "'$GRAFANA_URL'", "require_auth": true}, {"route": "'$PROMETHEUS_ROUTE'","url": "'$PROMETHEUS_URL'", "require_auth": true}, {"route": "'$KIBANA_ROUTE'","url": "'$KIBANA_URL'", "require_auth": true}]},"Monitoring":{"bind_address":"'$BIND_ADDRESS'"},"Logging":{"output_directory":"'$LOG_DIR'","separate_logs_per_component":true},"Client":{"server_urls":["'$VELO_SERVER_URL'"],"use_self_signed_ssl":true}, "Datastore":{"location":"'$DATASTORE_LOCATION'", "filestore_directory":"'$FILESTORE_DIRECTORY'"}}'
         #sed -i "s#https://localhost:8000/#$VELO_CLIENT_URL#" server.config.yaml
-        sed -i 's#/tmp/velociraptor#.#'g server.config.yaml
-        ./velociraptor --config server.config.yaml user add $VELO_USER $VELO_PASSWORD --role $VELO_ROLE
+	sed -i 's#/tmp/velociraptor#.#'g server.config.yaml
+	./velociraptor --config server.config.yaml user add $VELO_USER $VELO_PASSWORD --role $VELO_ROLE
+        cp -r /custom $DATASTORE_LOCATION/artifact_definitions
 fi
 
 # Re-generate client config in case server config changed
@@ -40,5 +41,5 @@ fi
 ./velociraptor config repack --exe clients/mac/velociraptor_client client.config.yaml clients/mac/velociraptor_client_repacked
 ./velociraptor config repack --exe clients/windows/velociraptor_client.exe client.config.yaml clients/windows/velociraptor_client_repacked.exe
 
-# Start Velocoraptor
-./velociraptor --definitions /custom --config server.config.yaml frontend -v
+# Run Velociraptor
+./velociraptor --config server.config.yaml frontend -v
