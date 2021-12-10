@@ -101,6 +101,7 @@ services:
       - SERVER_BASEPATH=/kibana
       - SERVER_DEFAULTROUTE=/app/discover
       - SERVER_DEFAULTINDEX=artifact*
+      - SERVER_SHOWINSECURECLUSTERWARNING=false
       - TELEMETRY_ENABLED=false
     ports:
       - 5601:5601
