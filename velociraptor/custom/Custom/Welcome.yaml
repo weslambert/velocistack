@@ -23,14 +23,18 @@ reports:
 
       # Welcome to Velociraptor!
 
-      ## Additional tools:
-      
+      ## Additional Tools:
+
       * <a href="/cyberchef">Cyberchef</a>
       * <a href="/grafana">Grafana</a>
       * <a href="/kibana">Kibana</a>
       * <a href="/prometheus">Prometheus</a>
 
-      ## Common tasks:
+      ## Client Binary Downloads:
+
+      * <a href="/binaries">Client Downloads</a>
+
+      ## Common Tasks:
 
       * <a href="#/dashboard">Inspect the server's state</a>
       * <a href="#/collected/server">Building an Offline Collector</a>
