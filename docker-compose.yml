@@ -107,6 +107,15 @@ services:
       - 5601:5601
     depends_on:
       - elasticsearch
+  setup_kibana:
+    image: centos:7
+    container_name: setup_kibana
+    volumes:
+      - ./kibana/scripts/setup-kibana.sh:/setup-kibana.sh:ro
+        #command: /bin/bash
+    command: ['/bin/bash', '-c', 'cat /setup-kibana.sh | tr -d "\r" | bash']
+    depends_on:
+      - kibana
 
 volumes:
   elasticsearch-data:
