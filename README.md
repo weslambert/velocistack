@@ -11,5 +11,27 @@ git clone https://github.com/weslambert/velocistack && cd velocistack
 sudo docker-compose up -d
 ```
 
-### Access Velociraptor
-Velociraptor can be accessed via `https://$YOURIP:8889`.
+### Authentication
+Currently, authentication occurs through Velociraptor. It proxies all other services.
+
+`User: admin`
+
+`Password: admin`
+
+### Web Access
+#### Velociraptor
+`https://$YOURIP:8889`
+
+#### Cyberchef
+`https://$YOURIP:8889/cyberchef`
+
+#### Grafana
+`https://$YOURIP:8889/grafana`
+
+#### Prometheus
+`https://$YOURIP:8889/prometheus`
+
+#### Kibana
+`https://$YOURIP:8889/kibana`
+
+
