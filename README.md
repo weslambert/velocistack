@@ -20,7 +20,7 @@ OR
 
 
 ### Authentication
-Currently, authentication occurs through Velociraptor. It proxies all other services.
+Currently, authentication occurs through Velociraptor. It proxies all other services, except for Zinc (if enabled).
 
 `User: admin`
 
