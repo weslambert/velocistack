@@ -1,4 +1,4 @@
-version: '3'
+version: '3.9'
 services:
   velociraptor:
     container_name: velociraptor
@@ -42,7 +42,7 @@ services:
       - /:/rootfs:ro
       - /var/run:/var/run:rw
       - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/snap/docker/common/var-lib-docker/:/var/lib/docker:ro
   pushgateway:
     image: prom/pushgateway
     container_name: pushgateway
@@ -72,7 +72,9 @@ services:
       - cadvisor
   
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.2
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION}
+    profiles: 
+      - elastic
     container_name: elasticsearch
     environment:
       - xpack.security.enabled=false
@@ -92,7 +94,9 @@ services:
 
   kibana:
     container_name: kibana
-    image: docker.elastic.co/kibana/kibana:7.15.2
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION}
+    profiles: 
+      - elastic
     environment:
       - xpack.security.enabled=false
       - xpack.spaces.enabled=false
@@ -107,8 +111,11 @@ services:
       - 5601:5601
     depends_on:
       - elasticsearch
+  
   setup_kibana:
     image: centos:7
+    profiles:
+      - elastic
     container_name: setup_kibana
     volumes:
       - ./kibana/scripts/setup-kibana.sh:/setup-kibana.sh:ro
@@ -116,22 +123,50 @@ services:
     command: ['/bin/bash', '-c', 'cat /setup-kibana.sh | tr -d "\r" | bash']
     depends_on:
       - kibana
+  
+  zinc:
+    container_name: zinc
+    profiles: ["zinc"]
+    #image: public.ecr.aws/h9e2j3o7/zinc:latest
+    build:
+      context: ./zinc
+      dockerfile: Dockerfile
+    volumes:
+      - ./zinc/data:/data:rw
+    environment:
+      - DATA_PATH=/data
+      - ZINC_FIRST_ADMIN_USER=${FIRST_ADMIN_USER}
+      - ZINC_FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
+    ports:
+      - "4080:4080"
+    restart: unless-stopped
 
+  omgwtfssl:
+    container_name: omgwtfssl
+    image: paulczar/omgwtfssl
+    profiles: ["zinc"]
+    restart: "no"
+    volumes:
+      - ./nginx/certs:/certs
+    environment:
+      - SSL_SUBJECT=$HOSTNAME
+      - CA_SUBJECT=my@example.com
+      - SSL_KEY=/certs/nginx.key
+      - SSL_CSR=/certs/nginx.csr
+      - SSL_CERT=/certs/nginx.crt
+
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    profiles: ["zinc"]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/ssl:ro
+    ports:
+      - '0.0.0.0:443:443'
+      - '0.0.0.0:80:80'
+    depends_on:
+      - omgwtfssl
 volumes:
   elasticsearch-data:
     driver: local
-
-#zinc:
-  #  container_name: zinc
-  #  build:
-  #    context: ./zinc
-  #    dockerfile: Dockerfile
-  #  volumes:
-  #    - ./zinc/data:/data:rw
-  #  environment:
-  #    - DATA_PATH=/data 
-  #    - FIRST_ADMIN_USER=${FIRST_ADMIN_USER}
-  #    - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
-  #  ports:
-  #    - "4080:4080"
-  #  restart: unless-stopped

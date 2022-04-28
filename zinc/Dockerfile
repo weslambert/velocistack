@@ -6,7 +6,7 @@ RUN apt-get update && \
     apt-get install -y wget && \
     # Get Zinc binary
     mkdir -p /opt/zinc && \
-    wget -O /opt/zinc/zinc.tar.gz https://github.com/prabhatsharma/zinc/releases/download/v0.1.1/zinc_0.1.1_Linux_x86_64.tar.gz && \
+    wget -O /opt/zinc/zinc.tar.gz https://github.com/zinclabs/zinc/releases/download/v0.1.9/zinc_0.1.9_Linux_x86_64.tar.gz && \
     tar -xvf /opt/zinc/zinc.tar.gz -C /opt/zinc/ && \
     # Clean up
     rm -f /opt/zinc/zinc.tar.gz && \
