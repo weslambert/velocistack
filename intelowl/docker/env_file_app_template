@@ -1,0 +1,136 @@
+# Required Secrets
+DJANGO_SECRET=
+DB_HOST=postgres
+DB_PORT=5432
+DB_USER=user
+DB_PASSWORD=password
+
+# Additional Config variables
+# jobs older than this would be flushed from the database periodically. Default: 3 days
+OLD_JOBS_RETENTION_DAYS=3
+# used for generating links to web client e.g. job results page; Default: localhost
+INTELOWL_WEB_CLIENT_DOMAIN=localhost
+# Storage
+LOCAL_STORAGE=True
+
+# AWS
+## S3 storage
+AWS_STORAGE_BUCKET_NAME=
+AWS_IAM_ACCESS=False
+### to use if no IAM credentials are provided
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+## secrets, broker and region
+AWS_SECRETS=False
+AWS_SQS=False
+AWS_REGION=eu-central-1
+
+# Elastic Search Configuration
+ELASTICSEARCH_ENABLED=False
+ELASTICSEARCH_HOST=
+# consult to: https://django-elasticsearch-dsl.readthedocs.io/en/latest/settings.html
+ELASTICSEARCH_NO_OF_SHARDS=1
+ELASTICSEARCH_NO_OF_REPLICAS=0
+
+# analyzers secrets (optional)
+CUCKOO_API_KEY=
+SHODAN_KEY=
+ABUSEIPDB_KEY=
+CAPESANDBOX_KEY=
+ANOMALI_THREATSTREAM_API_USER=
+ANOMALI_THREATSTREAM_API_KEY=
+AUTH0_KEY=
+SECURITYTRAILS_KEY=
+GSF_KEY=
+OTX_KEY=
+# Format: user|pass
+CIRCL_CREDENTIALS=
+VT_KEY=
+VT_INTELLIGENCE_KEY=
+HA_KEY=
+INTEZER_KEY=
+INQUEST_API_KEY=
+DOCGUARD_KEY=
+FIRST_MISP_API=
+MISP_KEY=
+MAXMIND_KEY=
+DNSDB_KEY=
+HONEYDB_API_ID=
+HONEYDB_API_KEY=
+HUNTER_API_KEY=
+CENSYS_API_ID=
+CENSYS_API_SECRET=
+ONYPHE_KEY=
+GREYNOISE_API_KEY=
+PULSEDIVE_API_KEY=
+INTELX_API_KEY=
+WHOISXMLAPI_KEY=
+UNPAC_ME_API_KEY=
+URLSCAN_API_KEY=
+PHISHTANK_API_KEY=
+IPINFO_KEY=
+ZOOMEYE_KEY=
+TRIAGE_KEY=
+EMAILREP_KEY=
+MWDB_KEY=
+WIGLE_KEY=
+XFORCE_KEY=
+XFORCE_PASSWORD=
+SSAPINET_KEY=
+GOOGLE_APPLICATION_CREDENTIALS=/opt/deploy/intel_owl/configuration/service_account_keyfile.json
+MALPEDIA_KEY=
+GREEDYBEAR_API_KEY=
+MALPEDIA_TOKEN=
+YARAIFY_KEY=
+# DEHASHED_AUTH_KEY format is `email:api-key`
+DEHASHED_AUTH_KEY=
+OPENCTI_KEY=
+YETI_KEY=
+SPYSE_API_KEY=
+DRAGONFLY_API_KEY=
+DRAGONFLY_API_URL=https://dragonfly.certego.net
+BITCOINABUSE_KEY=
+VIRUSHEE_API_KEY=
+STALKPHISH_KEY=
+
+# connectors secrets (optional)
+CONNECTOR_MISP_KEY=
+CONNECTOR_OPENCTI_KEY=
+CONNECTOR_YETI_KEY=
+
+# Test tokens
+TEST_JOB_ID=1
+TEST_IP=8.8.8.8
+TEST_DOMAIN=www.google.com
+TEST_URL=https://www.google.com/search?test
+TEST_MD5=446c5fbb11b9ce058450555c1c27153c
+
+# URLs
+CAPESANDBOX_URL=
+CUCKOO_URL=
+MISP_URL=
+FIRST_MISP_URL=
+VT_NOTIFY_URL=
+OPENCTI_URL=
+OPENCTI_URL=
+YETI_URL=
+CONNECTOR_MISP_URL=
+CONNECTOR_OPENCTI_URL=
+CONNECTOR_YETI_URL=
+
+# other variables
+STAGE="production"
+DEBUG=False
+LDAP_ENABLED=False
+DISABLE_LOGGING_TEST=False
+MOCK_CONNECTIONS=False
+DB_NAME=intel_owl_db
+HTTPS_ENABLED=not_enabled
+RADIUS_AUTH_ENABLED=False
+# broker configuration
+BROKER_URL=amqp://guest:guest@rabbitmq:5672
+BROKER_URL_API=http://guest:guest@rabbitmq:15672/api/
+RABBITMQ_DEFAULT_USER=guest
+RABBITMQ_DEFAULT_PASS=guest
+FLOWER_USER=flower
+FLOWER_PWD=flower

@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  uwsgi:
+    environment:
+      - CELERY_QUEUES=default,local,long
+
+
+  celery_worker_local:
+    image: intelowlproject/intelowl:${INTELOWL_TAG_VERSION}
+    container_name: intelowl_celery_worker_local
+    restart: unless-stopped
+    stop_grace_period: 3m
+    volumes:
+      - ../configuration:/opt/deploy/intel_owl/configuration
+      - generic_logs:/var/log/intel_owl
+      - shared_files:/opt/deploy/files_required
+    entrypoint:
+      - ./docker/entrypoints/celery_local.sh
+    env_file:
+      - env_file_app
+    depends_on:
+      - rabbitmq
+      - postgres
+      - uwsgi
+
+  celery_worker_long:
+    image: intelowlproject/intelowl:${INTELOWL_TAG_VERSION}
+    container_name: intelowl_celery_worker_long
+    restart: unless-stopped
+    stop_grace_period: 3m
+    volumes:
+      - ../configuration:/opt/deploy/intel_owl/configuration
+      - generic_logs:/var/log/intel_owl
+      - shared_files:/opt/deploy/files_required
+    entrypoint:
+      - ./docker/entrypoints/celery_long.sh
+    env_file:
+      - env_file_app
+    depends_on:
+      - rabbitmq
+      - postgres
+      - uwsgi
+

@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Build images
+docker-compose --profile "iris" --profile "elastic" build
+
+# Start everything up
+docker-compose --profile "iris" --profile "elastic" up -d
+
+# Sleep for a minute
+echo "Sleeping for 60s to ensure services are online before proceeding..."
+sleep 60s
+
+# Add IRIS Velociraptor module
+./velociraptor/add_iris_velo_module
+
+# Start IntelOwl stuff

@@ -1,0 +1,135 @@
+name: Custom.Server.IRIS.Module.Create
+description: |
+   Create an IRIS module via the IRIS API.
+  
+   Learn more about IRIS, here: https://dfir-iris.org/
+  
+   It is recommended to use the Server Metadata section to store credentials, instead of having to store directly inside the artifact.
+
+   Ex. `SELECT * FROM Artifact.Custom.Server.IRIS.Module.Create(IrisURL=$URL, IrisKey=$KEY, ModuleName=$NAME)`
+
+author: Wes Lambert - @therealwlambert
+type: server
+parameters:
+  - name: IrisURL
+    type: string
+    default:
+
+  - name: IrisKey
+    type: string
+    description: API key for DFIR-IRIS. Leave blank here if using server metadata store.
+    default:
+
+  - name: ModuleName
+    type: string
+    default: iris_ioc_velo_module
+
+  - name: DisableSSLVerify
+    type: bool
+    default: True
+sources:
+  - query: |
+      LET IrisUrl <= if(
+            condition=IrisURL,
+            then=IrisURL,
+            else=server_metadata().IrisURL)
+      LET Creds = if(
+           condition=IrisKey,
+           then=IrisKey,
+           else=server_metadata().IrisKey)
+           
+      LET ModuleConfig ='''
+      [
+          {
+              "default": null,
+              "mandatory": true,
+              "param_description": "Specify the full path to the API config file (yaml) to be used by pyvelociraptor. This must be accessible from the DFIR-IRIS container",
+              "param_human_name": "velo API config file",
+              "param_name": "velo_api_config",
+              "type": "string",
+              "value": "/velociraptor-api-config.yaml"
+          },
+          {
+              "default": true,
+              "mandatory": true,
+              "param_description": "Set to True to offers possibility to manually triggers the module via the UI",
+              "param_human_name": "Manual triggers on IOCs",
+              "param_name": "velo_manual_hook_enabled",
+              "section": "Triggers",
+              "type": "bool",
+              "value": true
+          },
+          {
+              "default": false,
+              "mandatory": true,
+              "param_description": "Set to True to automatically start a hunt in Velociraptor each time an IOC is created",
+              "param_human_name": "Triggers automatically on IOC create",
+              "param_name": "velo_on_create_hook_enabled",
+              "section": "Triggers",
+              "type": "bool",
+              "value": true
+          },
+          {
+              "default": false,
+              "mandatory": true,
+              "param_description": "Set to True to automatically start a hunt in Velociraptor each time an IOC is updated",
+              "param_human_name": "Triggers automatically on IOC update",
+              "param_name": "velo_on_update_hook_enabled",
+              "section": "Triggers",
+              "type": "bool",
+              "value": true
+          }
+      ]
+      '''
+
+      LET ConnectionCheck <= SELECT * FROM foreach(row={select * FROM clock()}, query={
+          SELECT "Connected!" AS Status 
+          FROM http_client(
+            method="GET",
+            url=IrisUrl,disable_ssl_security=true) 
+          WHERE Response = 200
+      }) LIMIT 1
+     
+      LET AddModule = SELECT parse_json(data=Content) AS CaseAddition FROM http_client(
+        method="POST", 
+        data=serialize(item=dict(  `module_name`=ModuleName
+        ),format="json"), url=IrisUrl + '''/manage/modules/add''',
+        headers=dict(`Content-Type`="application/json", `Authorization`='''Bearer ''' + Creds),
+        disable_ssl_security=true
+      )
+
+      LET GetModules = SELECT parse_json(data=Content).data AS ModuleListing FROM http_client(
+          method="GET", 
+          url=IrisUrl + '''/manage/modules/list''',
+          headers=dict(`Content-Type`="application/json", `Authorization`='''Bearer ''' + Creds),
+          disable_ssl_security=true
+      )
+
+      LET ModuleId = SELECT * FROM foreach(
+          row=GetModules,
+          query={
+              SELECT * FROM foreach(
+                  row=ModuleListing,
+                  query={
+                      SELECT id FROM scope() 
+                      WHERE module_human_name =~ "IrisVelo"})})
+
+      LET AddModuleConfig = SELECT parse_json(data=Content) AS ConfigStatus FROM http_client(
+          method="POST", 
+          data=serialize(item=dict(`module_configuration`=ModuleConfig),format="json"), url=IrisUrl + '''/manage/modules/import-config/''' + str(str=ModuleId.id[0]),
+          headers=dict(`Content-Type`="application/json", `Authorization`='''Bearer ''' + Creds),
+          disable_ssl_security=true
+      )
+
+      LET EnableModule = SELECT parse_json(data=Content) AS EnableStatus FROM http_client(
+          method="POST", 
+          data=serialize(item=dict(`cid`=1),format="json"), url=IrisUrl + '''/manage/modules/enable/''' + str(str=ModuleId.id[0]),
+          headers=dict(`Content-Type`="application/json", `Authorization`='''Bearer ''' + Creds),
+          disable_ssl_security=true
+      )
+
+      SELECT * FROM chain(
+        a=AddModule,
+        b=AddModuleConfig,
+        c=EnableModule
+      )
