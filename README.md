@@ -20,30 +20,46 @@ OR
 
 
 ### Authentication
-Currently, authentication occurs through Velociraptor. It proxies all other services, except for Zinc (if enabled).
+Currently, authentication occurs through Velociraptor. It proxies all other services, except for IRIS and IntelOwl
 
+#### Velociraptor credentials:
 `User: admin`
 
 `Password: admin`
 
+#### IRIS credentials:
+`User: administrator`
+
+`Password: admin`
+
+#### IntelOwl credentials:
+Create superuser credentials for IntelOwl by running the following command from the CLI:
+
+`sudo docker exec -ti uwsgi python3 manage.py createsuperuser`
+
+
 ### Web Access
 #### Velociraptor
-`https://$YOURIP:8889`
+`https://$YOURIP/velocistack`
 
 #### Cyberchef
-`https://$YOURIP:8889/cyberchef`
+`https://$YOURIP/velocistack/cyberchef`
 
 #### Grafana
-`https://$YOURIP:8889/grafana`
+`https://$YOURIP/velocistack/grafana`
+
+#### IntelOwl
+`https://$YOURIP:8443`
+
+#### IRIS
+`https://$YOURIP/`
 
 #### Prometheus
-`https://$YOURIP:8889/prometheus`
+`https://$YOURIP/velocistack/prometheus`
 
 #### Kibana
-`https://$YOURIP:8889/kibana`
+`https://$YOURIP/velocistack/kibana`
 
-#### Zinc (if enabled)
-`https://$YOURIP/zinc`
 
 ### Troubleshooting
 If you experience an error with `cadvisor` and `/var/lib/docker`, try replacing the volume with `/var/snap/docker/common/var-lib-docker/` (for Docker installs that have occurred via `snap`).
