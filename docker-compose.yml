@@ -209,7 +209,7 @@ services:
       context: .
       dockerfile: docker/webApp/Dockerfile
     image: iriswebapp_app:latest
-    command: ['nohup', './iris-entrypoint.sh', 'iriswebapp']
+    command: /bin/bash -c "until pg_isready --username=$DB_USER --host=db; do sleep 1; done && nohup ./iris-entrypoint.sh iriswebapp"
     volumes:
       - iris-downloads:/home/iris/downloads
       - user_templates:/home/iris/user_templates
