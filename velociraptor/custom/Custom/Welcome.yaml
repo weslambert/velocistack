@@ -21,34 +21,20 @@ reports:
       <img src="assets/velo.svg" height="150">
       <div class="card-body">
 
-      # Welcome to Velociraptor!
+      # Welcome to Velocistack!
 
-      ## Additional Tools:
 
-      * <a href="/cyberchef">Cyberchef</a>
-      * <a href="/grafana">Grafana</a>
-      * <a href="/kibana">Kibana</a>
-      * <a href="/prometheus">Prometheus</a>
+      ## Tools:
+
+      <a class="btn" href="/velocistack/cyberchef">Cyberchef</a>
+      <a class="btn" href="/velocistack/grafana">Grafana</a>
+      <a class="btn" href="/intelowl">IntelOwl</a>
+      <a class="btn" href="/">IRIS</a>
+      <a class="btn" href="/velocistack/kibana">Kibana</a>
+      <a class="btn" href="/velocistack/prometheus">Prometheus</a>
 
       ## Client Binary Downloads:
 
-      * <a href="/binaries">Client Downloads</a>
-
-      ## Common Tasks:
-
-      * <a href="#/dashboard">Inspect the server's state</a>
-      * <a href="#/collected/server">Building an Offline Collector</a>
-      * <a href="#/notebooks">Write VQL notebooks</a>
-      * <a href="#/host/server">View Server Configuration</a>
-      * <a href="#/artifacts/Server.Internal.Welcome">Customize this welcome screen</a>
-
-      Or simply search for a client in the search bar above.
-
-      You can always get back to this welcome screen by clicking the
-      little green reptile above!
-
-      ## Tips
-
-      1. Press `Ctrl-/` to view keyboard hotkeys.
+      <a class="btn" href="/velocistack/binaries">Client Downloads</a>
 
       </div></div></div>
