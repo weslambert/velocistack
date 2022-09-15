@@ -5,7 +5,7 @@ PRIMARY_IP=$(hostname -I | awk '{print $1}')
 sed -i "s/PRIMARY_IP/$PRIMARY_IP/" ./nginx/nginx.conf
 
 # Substitute primary IP for IRIS server communication
-sed -i "s/PRIMARY_IP/$PRIMARY_IP/" ./velociraptor/add_viris_velo_module
+sed -i "s/PRIMARY_IP/$PRIMARY_IP/" ./velociraptor/add_iris_velo_module
 
 # Build images
 docker compose --profile "elastic" --profile "intelowl" --profile "iris" build
