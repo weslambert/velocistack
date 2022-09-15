@@ -31,14 +31,8 @@ To allow individuals to uickly spin up a local, integrated environment for analy
 git clone https://github.com/weslambert/velocistack && cd velocistack
 ```
 
-### Run with Elastic Stack
-`docker-compose --profile elastic up -d`
-
-OR
-
-### Run with Zinc (Experimental)
-`docker-compose --profile zinc up -d`
-
+### Run the installer script
+`sudo ./install_velocistack
 
 ### Authentication
 Currently, authentication occurs through Velociraptor. It proxies all other services, except for IRIS and IntelOwl
