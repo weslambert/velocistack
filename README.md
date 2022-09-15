@@ -1,4 +1,4 @@
-# velocistack
+# Velocistack
 
 ## Introduction
 ### What is Velocistack?
