@@ -32,7 +32,7 @@ git clone https://github.com/weslambert/velocistack && cd velocistack
 ```
 
 ### Run the installer script
-`sudo ./install_velocistack
+`sudo ./install_velocistack`
 
 ### Authentication
 Currently, authentication occurs through Velociraptor. It proxies all other services, except for IRIS and IntelOwl
