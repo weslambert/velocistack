@@ -12,7 +12,7 @@ Velocistack is a free and open solution for streamlined host-based forensics and
 
 ### Why was Velocistack created?
 
-To allow individuals to uickly spin up a local, integrated environment for analysis and investigation of forensic artifacts collected by Velociraptor, using popular free and open tools.
+To allow individuals to quickly spin up a local, integrated environment for analysis and investigation of forensic artifacts collected by Velociraptor, using popular free and open tools.
 
 ### Who should use Velocistack?
 
