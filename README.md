@@ -1,5 +1,7 @@
 # Velocistack
 
+![image](https://user-images.githubusercontent.com/16829864/190757428-51012a52-13d5-429e-837f-3215a64598a8.png)
+
 ## Introduction
 ### What is Velocistack?
 Velocistack is a free and open solution for streamlined host-based forensics and investigation.
