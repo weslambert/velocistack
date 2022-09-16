@@ -37,7 +37,7 @@ git clone https://github.com/weslambert/velocistack && cd velocistack
 `sudo ./install_velocistack`
 
 ### Authentication
-Currently, authentication occurs through Velociraptor. It proxies all other services, except for IRIS and IntelOwl
+Currently, authentication occurs primarily through Velociraptor. It proxies all services, except for IRIS and IntelOwl
 
 #### Velociraptor credentials:
 `User: admin`
