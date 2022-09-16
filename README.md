@@ -24,7 +24,7 @@ To allow individuals to uickly spin up a local, integrated environment for analy
 ## Getting started
 ### Pre-reqs
 - Tested on Ubuntu 20.04, although 18.04 should work as well (or other distros)
-- Docker and docker-compose should be installed.
+- Docker should be installed.
 
 ### Clone
 ```
