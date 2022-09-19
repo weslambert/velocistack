@@ -27,6 +27,7 @@ To allow individuals to quickly spin up a local, integrated environment for anal
 ### Pre-reqs
 - Tested on Ubuntu 20.04, although 18.04 should work as well (or other distros)
 - Docker should be installed.
+- The Docker Compose plugin should be installed: https://docs.docker.com/compose/install/
 
 ### Clone
 ```
