@@ -8,10 +8,10 @@ sed -i "s/PRIMARY_IP/$PRIMARY_IP/" ./nginx/nginx.conf
 sed -i "s/PRIMARY_IP/$PRIMARY_IP/" ./velociraptor/add_iris_velo_module
 
 # Build images
-docker compose --profile "elastic" --profile "intelowl" --profile "iris" build
+docker-compose --profile "elastic" --profile "intelowl" --profile "iris" build
 
 # Start everything up
-docker compose --profile "elastic" --profile "intelowl" --profile "iris" up -d
+docker-compose --profile "elastic" --profile "intelowl" --profile "iris" up -d
 
 # Sleep for a minute
 echo "Sleeping for 60s to ensure services are online before proceeding..."
