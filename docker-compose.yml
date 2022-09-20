@@ -9,6 +9,7 @@ services:
     volumes:
       - ./velociraptor_data:/velociraptor/:rw
       - ./velociraptor/custom:/custom:ro
+      - velo_api:/api/
     environment:
       - VELO_USER=${VELO_USER}
       - VELO_PASSWORD=${VELO_PASSWORD}
@@ -174,7 +175,7 @@ services:
       - iris_frontend
   
   rabbitmq:
-    profiles: ["iris"]
+    profiles: ["iris", "intelowl"]
     image: rabbitmq:3-management-alpine
     container_name: rabbitmq
     ports:
@@ -182,6 +183,7 @@ services:
         - "0.0.0.0:15672:15672"
     networks:
       - iris_backend
+      - default
 
   db:
     container_name: iris-db
@@ -214,7 +216,7 @@ services:
       - iris-downloads:/home/iris/downloads
       - user_templates:/home/iris/user_templates
       - server_data:/home/iris/server_data
-      - ./velociraptor_data/api.config.yaml:/velociraptor-api-config.yaml
+      - velo_api:/velociraptor:ro
     restart: always
     depends_on:
       - "rabbitmq"
@@ -251,7 +253,7 @@ services:
       - iris-downloads:/home/iris/downloads
       - user_templates:/home/iris/user_templates
       - server_data:/home/iris/server_data
-      - ./velociraptor_data/api.config.yaml:/velociraptor-api-config.yaml
+      - velo_api:/velociraptor:ro
     depends_on:
       - "rabbitmq"
       - "db"
@@ -315,7 +317,7 @@ services:
     env_file:
       - ./intelowl/docker/env_file_app
     depends_on:
-      - rabbitmqio
+      - rabbitmq
       - postgres
       - uwsgi
 
@@ -340,7 +342,7 @@ services:
     env_file:
       - ./intelowl/docker/env_file_app
     depends_on:
-      - rabbitmqio
+      - rabbitmq
       - postgres
   intelowl_nginx:
     profiles: ["intelowl"]
@@ -360,12 +362,6 @@ services:
         #- "443:443"
     depends_on:
       - uwsgi
-  rabbitmqio:
-    profiles: ["intelowl"]      
-    image: library/rabbitmq:3.9-alpine
-    container_name: intelowl_rabbitmq
-    logging:
-      driver: none
 volumes:
   elasticsearch-data:
     driver: local
@@ -379,6 +375,7 @@ volumes:
   shared_files:
   nginx_logs:
   nginx_certs:
+  velo_api:
 networks:
   iris_backend:
     name: iris_backend
@@ -386,4 +383,3 @@ networks:
   iris_frontend:
     name: iris_frontend
     driver: bridge
-
