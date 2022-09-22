@@ -9,6 +9,7 @@ services:
     volumes:
       - ./velociraptor_data:/velociraptor/:rw
       - ./velociraptor/custom:/custom:ro
+      - ./velociraptor/entrypoint:/entrypoint:ro
       - velo_api:/api/
     environment:
       - VELO_USER=${VELO_USER}
