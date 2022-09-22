@@ -1,11 +1,11 @@
+
 #!/bin/bash
 PRIMARY_IP=$(hostname -I | awk '{print $1}')
 
-# Primary IP for Nginx configuration
-sed -i "s/PRIMARY_IP/$PRIMARY_IP/" ./nginx/nginx.conf
-
-# Substitute primary IP for IRIS server communication
-sed -i "s/PRIMARY_IP/$PRIMARY_IP/" ./velociraptor/add_iris_velo_module
+# Primary IP for configuration
+for i in ./nginx/nginx.conf ./velociraptor/add_iris_velo_module ./velociraptor/entrypoint; do
+    sed -i "s/PRIMARY_IP/$PRIMARY_IP/g" $i
+done
 
 # Build images
 docker compose --profile "elastic" --profile "intelowl" --profile "iris" build
@@ -13,10 +13,11 @@ docker compose --profile "elastic" --profile "intelowl" --profile "iris" build
 # Start everything up
 docker compose --profile "elastic" --profile "intelowl" --profile "iris" up -d
 
+#### Don't configure IRIS module for now
 # Sleep for a minute
-echo "Sleeping for 60s to ensure services are online before proceeding..."
-sleep 60s
+#echo "Sleeping for 60s to ensure services are online before proceeding..."
+#sleep 60s
 
 # Add IRIS Velociraptor module
-./velociraptor/add_iris_velo_module
-
+#./velociraptor/add_iris_velo_module
+####
