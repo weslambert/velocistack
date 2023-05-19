@@ -110,26 +110,24 @@ function handle_ed_paste(event) {
     }
 }
 
-var sh_ext = showdown.extension('bootstrap-tables', function () {
-  return [{
-    type: "output",
-    filter: function (html, converter, options) {
-      // parse the html string
-      var liveHtml = $('<div></div>').html(html);
-      $('table', liveHtml).each(function(){
-      	var table = $(this);
-        // table bootstrap classes
-        table.addClass('table table-striped table-bordered table-hover table-sm')
-        // make table responsive
-        .wrap('<div class="class table-responsive"></div>');
-      });
-      return liveHtml.html();
-    }
-  }];
-});
-
 function report_template_selector() {
     $('#modal_select_report').modal({ show: true });
+}
+
+function gen_report(safe) {
+    url = '/case/report/generate-investigation/' + $("#select_report option:selected").val() + case_param();
+    if (safe === true) {
+        url += '&safe=true';
+    }
+    window.open(url, '_blank');
+}
+
+function gen_act_report(safe) {
+    url = '/case/report/generate-activities/' + $("#select_report_act option:selected").val() + case_param();
+    if (safe === true) {
+        url += '&safe=true';
+    }
+    window.open(url, '_blank');
 }
 
 function act_report_template_selector() {
@@ -141,9 +139,13 @@ function edit_case_summary() {
     if ($('#container_editor_summary').is(':visible')) {
         $('#ctrd_casesum').removeClass('col-md-12').addClass('col-md-6');
         $('#summary_edition_btn').show(100);
+        $("#sum_refresh_btn").html('Save');
+        $("#sum_edit_btn").html('Cancel');
     } else {
         $('#ctrd_casesum').removeClass('col-md-6').addClass('col-md-12');
         $('#summary_edition_btn').hide();
+        $("#sum_refresh_btn").html('Refresh');
+        $("#sum_edit_btn").html('Edit');
     }
 }
 
@@ -254,12 +256,54 @@ function auto_remove_typing() {
     }
 }
 
+function case_pipeline_popup() {
+    url = '/case/pipelines-modal' + case_param();
+    $('#info_case_modal_content').load(url, function (response, status, xhr) {
+        if (status !== "success") {
+             ajax_notify_error(xhr, url);
+             return false;
+        }
+        $('#modal_case_detail').modal({ show: true });
+        $("#update_pipeline_selector").selectpicker({
+            liveSearch: true,
+            style: "btn-outline-white"
+            })
+        $('#update_pipeline_selector').selectpicker("refresh");
+        $(".control-update-pipeline-args ").hide();
+        $('.control-update-pipeline-'+ $('#update_pipeline_selector').val() ).show();
+        $('#update_pipeline_selector').on('change', function(e){
+          $(".control-update-pipeline-args ").hide();
+          $('.control-update-pipeline-'+this.value).show();
+        });
+        $('[data-toggle="popover"]').popover();
+    });
+}
+
+function case_detail(case_id, edit_mode=false) {
+    url = '/case/details/' + case_id + case_param();
+    $('#info_case_modal_content').load(url, function (response, status, xhr) {
+        if (status !== "success") {
+             ajax_notify_error(xhr, url);
+             return false;
+        }
+        $('#modal_case_detail').modal({ show: true });
+        if (edit_mode) {
+            edit_case_info();
+        }
+    });
+}
+
+function manage_case(case_id) {
+   window.location = '/manage/cases?cid='+ case_id +'#view';
+}
+
+
 $(document).ready(function() {
 
-    if ($("#editor_summary").attr("data-theme") != "dark") {
+    if ($("#editor_summary").attr("data-theme") !== "dark") {
         editor.setTheme("ace/theme/tomorrow");
     } else {
-        editor.setTheme("ace/theme/tomorrow_night");
+        editor.setTheme("ace/theme/iris_night");
     }
     editor.session.setMode("ace/mode/markdown");
     editor.renderer.setShowGutter(true);
@@ -325,38 +369,33 @@ $(document).ready(function() {
         handle_ed_paste(event);
     });
 
-    var textarea = $('#case_summary');
-    editor.getSession().on("change", function () {
-        textarea.val(editor.getSession().getValue());
-        $('#last_saved').text('Changes not saved').addClass('badge-danger').removeClass('badge-success');
-        target = document.getElementById('targetDiv'),
-        converter = new showdown.Converter({
-            tables: true,
-            extensions: ['bootstrap-tables'],
-            parseImgDimensions: true
-        }),
-        html = converter.makeHtml(editor.getSession().getValue());
+    var timer;
+    var timeout = 10000;
+    $('#editor_summary').keyup(function(){
+        if(timer) {
+             clearTimeout(timer);
+        }
+        timer = setTimeout(sync_editor, timeout);
+    });
 
-        target.innerHTML = html;
+
+    //var textarea = $('#case_summary');
+    editor.getSession().on("change", function () {
+        //textarea.val(do_md_filter_xss(editor.getSession().getValue()));
+        $('#last_saved').text('Changes not saved').addClass('badge-danger').removeClass('badge-success');
+        let target = document.getElementById('targetDiv');
+        let converter = get_showdown_convert();
+        let html = converter.makeHtml(do_md_filter_xss(editor.getSession().getValue()));
+
+        target.innerHTML = do_md_filter_xss(html);
 
     });
 
     edit_case_summary();
     body_loaded();
-    if (is_db_linked == 1) {
-        sync_editor(true);
-        setInterval(auto_remove_typing, 3000);
-    }
+    sync_editor(true);
+    setInterval(auto_remove_typing, 2000);
 
-    $('#generate_report_button').attr("href", '/report/generate/case/' + $("#select_report option:selected").val() + case_param());
-    $("#select_report").on("change", function(){
-        $('#generate_report_button').attr("href", '/report/generate/case/' + $("#select_report option:selected").val() + case_param());
-    });
-
-    $('#generate_report_act_button').attr("href", '/report/generate/activities/' + $("#select_report_act option:selected").val() + case_param());
-    $("#select_report_act").on("change", function(){
-        $('#generate_report_act_button').attr("href", '/report/generate/activities/' + $("#select_report_act option:selected").val() + case_param());
-    });
 });
 
 

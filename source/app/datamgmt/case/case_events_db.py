@@ -17,25 +17,31 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-
+from flask_login import current_user
 from sqlalchemy import and_
 
 from app import db
+from app.datamgmt.states import update_timeline_state
 from app.models import AssetsType
 from app.models import CaseAssets
 from app.models import CaseEventCategory
 from app.models import CaseEventsAssets
 from app.models import CaseEventsIoc
 from app.models import CasesEvent
+from app.models import Comments
 from app.models import EventCategory
+from app.models import EventComments
 from app.models import Ioc
+from app.models import IocAssetLink
 from app.models import IocLink
 from app.models import IocType
+from app.models.authorization import User
 
 
 def get_case_events_assets_graph(caseid):
     events = CaseEventsAssets.query.with_entities(
         CaseEventsAssets.event_id,
+        CasesEvent.event_uuid,
         CasesEvent.event_title,
         CaseAssets.asset_name,
         CaseAssets.asset_id,
@@ -43,7 +49,7 @@ def get_case_events_assets_graph(caseid):
         AssetsType.asset_icon_not_compromised,
         AssetsType.asset_icon_compromised,
         CasesEvent.event_color,
-        CaseAssets.asset_compromised,
+        CaseAssets.asset_compromise_status_id,
         CaseAssets.asset_description,
         CaseAssets.asset_ip,
         CasesEvent.event_date,
@@ -63,6 +69,7 @@ def get_case_events_assets_graph(caseid):
 def get_case_events_ioc_graph(caseid):
     events = CaseEventsIoc.query.with_entities(
         CaseEventsIoc.event_id,
+        CasesEvent.event_uuid,
         CasesEvent.event_title,
         CasesEvent.event_date,
         Ioc.ioc_id,
@@ -104,6 +111,75 @@ def get_case_event(event_id, caseid):
         CasesEvent.event_id == event_id,
         CasesEvent.case_id == caseid
     ).first()
+
+
+def get_case_event_comments(event_id, caseid):
+    return Comments.query.filter(
+        EventComments.comment_event_id == event_id
+    ).join(
+        EventComments,
+        Comments.comment_id == EventComments.comment_id
+    ).order_by(
+        Comments.comment_date.asc()
+    ).all()
+
+
+def get_case_events_comments_count(events_list):
+    return EventComments.query.filter(
+        EventComments.comment_event_id.in_(events_list)
+    ).with_entities(
+        EventComments.comment_event_id,
+        EventComments.comment_id
+    ).group_by(
+        EventComments.comment_event_id,
+        EventComments.comment_id
+    ).all()
+
+
+def get_case_event_comment(event_id, comment_id, caseid):
+    return EventComments.query.filter(
+        EventComments.comment_event_id == event_id,
+        EventComments.comment_id == comment_id
+    ).with_entities(
+        Comments.comment_id,
+        Comments.comment_text,
+        Comments.comment_date,
+        Comments.comment_update_date,
+        Comments.comment_uuid,
+        User.name,
+        User.user
+    ).join(
+        EventComments.comment,
+        Comments.user
+    ).first()
+
+
+def delete_event_comment(event_id, comment_id):
+    comment = Comments.query.filter(
+        Comments.comment_id == comment_id,
+        Comments.comment_user_id == current_user.id
+    ).first()
+    if not comment:
+        return False, "You are not allowed to delete this comment"
+
+    EventComments.query.filter(
+        EventComments.comment_event_id == event_id,
+        EventComments.comment_id == comment_id
+    ).delete()
+
+    db.session.delete(comment)
+    db.session.commit()
+
+    return True, "Comment deleted"
+
+
+def add_comment_to_event(event_id, comment_id):
+    ec = EventComments()
+    ec.comment_event_id = event_id
+    ec.comment_id = comment_id
+
+    db.session.add(ec)
+    db.session.commit()
 
 
 def delete_event_category(event_id):
@@ -154,7 +230,7 @@ def get_event_iocs_ids(event_id, caseid):
     return [x[0] for x in iocs_list]
 
 
-def update_event_assets(event_id, caseid, assets_list):
+def update_event_assets(event_id, caseid, assets_list, iocs_list, sync_iocs_assets):
 
     CaseEventsAssets.query.filter(
         CaseEventsAssets.event_id == event_id,
@@ -170,6 +246,21 @@ def update_event_assets(event_id, caseid, assets_list):
             cea.case_id = caseid
 
             db.session.add(cea)
+
+            if sync_iocs_assets:
+                for ioc in iocs_list:
+                    link = IocAssetLink.query.filter(
+                        IocAssetLink.asset_id == int(asset),
+                        IocAssetLink.ioc_id == int(ioc)
+                    ).first()
+
+                    if link is None:
+
+                        ial = IocAssetLink()
+                        ial.asset_id = int(asset)
+                        ial.ioc_id = int(ioc)
+
+                        db.session.add(ial)
 
         except Exception as e:
             return False, str(e)
@@ -247,3 +338,35 @@ def get_case_iocs_for_tm(caseid):
         })
 
     return iocs
+
+
+def delete_event(event, caseid):
+    delete_event_category(event.event_id)
+
+    CaseEventsAssets.query.filter(
+        CaseEventsAssets.event_id == event.event_id,
+        CaseEventsAssets.case_id == caseid
+    ).delete()
+
+    CaseEventsIoc.query.filter(
+        CaseEventsIoc.event_id == event.event_id,
+        CaseEventsIoc.case_id == caseid
+    ).delete()
+
+    com_ids = EventComments.query.with_entities(
+        EventComments.comment_id
+    ).filter(
+        EventComments.comment_event_id == event.event_id
+    ).all()
+
+    com_ids = [c.comment_id for c in com_ids]
+    EventComments.query.filter(EventComments.comment_id.in_(com_ids)).delete()
+
+    Comments.query.filter(Comments.comment_id.in_(com_ids)).delete()
+
+    db.session.commit()
+
+    db.session.delete(event)
+    update_timeline_state(caseid=caseid)
+
+    db.session.commit()

@@ -19,16 +19,13 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-import os
 
 import datetime
-
-from flask_login import current_user
 from pathlib import Path
 
+from flask_login import current_user
 from sqlalchemy import and_
 from sqlalchemy import func
-from sqlalchemy import or_
 
 from app import app
 from app import db
@@ -186,10 +183,10 @@ def datastore_add_child_node(parent_node, folder_name, cid):
         ).first()
 
     except Exception as e:
-        return True, f'Unable to request datastore for parent node : {parent_node}'
+        return True, f'Unable to request datastore for parent node : {parent_node}', None
 
     if dsp_base is None:
-        return True, 'Parent node is invalid for this case'
+        return True, 'Parent node is invalid for this case', None
 
     dsp = DataStorePath()
     dsp.path_case_id = cid
@@ -200,7 +197,7 @@ def datastore_add_child_node(parent_node, folder_name, cid):
     db.session.add(dsp)
     db.session.commit()
 
-    return False, 'Folder added'
+    return False, 'Folder added', dsp
 
 
 def datastore_rename_node(parent_node, folder_name, cid):
@@ -212,15 +209,15 @@ def datastore_rename_node(parent_node, folder_name, cid):
         ).first()
 
     except Exception as e:
-        return True, f'Unable to request datastore for parent node : {parent_node}'
+        return True, f'Unable to request datastore for parent node : {parent_node}', None
 
     if dsp_base is None:
-        return True, 'Parent node is invalid for this case'
+        return True, 'Parent node is invalid for this case', None
 
     dsp_base.path_name = folder_name
     db.session.commit()
 
-    return False, 'Folder renamed'
+    return False, 'Folder renamed', dsp_base
 
 
 def datastore_delete_node(node_id, cid):
@@ -233,6 +230,9 @@ def datastore_delete_node(node_id, cid):
 
     except Exception as e:
         return True, f'Unable to request datastore for parent node : {node_id}'
+
+    if dsp_base is None:
+        return True, 'Parent node is invalid for this case'
 
     datastore_iter_deletion(dsp_base, cid)
 
