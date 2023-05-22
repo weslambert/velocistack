@@ -27,8 +27,8 @@ RUN python -m venv /opt/venv
 # Make sure we use the virtualenv:
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY source/dependencies /dependencies
-COPY source/requirements.txt /
+COPY ./iris/source/dependencies /dependencies
+COPY ./iris/source/requirements.txt /
 
 RUN pip3 install -r requirements.txt
 
@@ -61,9 +61,9 @@ RUN mkdir -p /home/iris/server_data/datastore
 
 WORKDIR /iriswebapp
 
-COPY docker/webApp/iris-entrypoint.sh .
-COPY docker/webApp/wait-for-iriswebapp.sh .
-COPY ./source .
+COPY ./iris/docker/webApp/iris-entrypoint.sh .
+COPY ./iris/docker/webApp/wait-for-iriswebapp.sh .
+COPY ./iris/source .
 
 # Add execution right to binaries needed by evtx2splunk for iris_evtx module
 RUN chmod +x /iriswebapp/dependencies/evtxdump_binaries/linux/x64/fd

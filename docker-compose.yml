@@ -193,7 +193,7 @@ services:
     profiles: ["iris"]
     image: iriswebapp_db:v2.1.0-beta-1
     build:
-      context: iris/docker/db/Dockerfile
+      context: iris/docker/db
     restart: always
     ports:
       - "127.0.0.1:5432:5432"
