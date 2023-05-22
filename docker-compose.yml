@@ -217,7 +217,7 @@ services:
     image: iriswebapp_app:v2.1.0-beta-1
     command: /bin/bash -c "until pg_isready --username=$POSTGRES_ADMIN_USER --host=db; do sleep 1; done && nohup ./iris-entrypoint.sh iriswebapp"
     volumes:
-      - ./iris/source/app/post_init.py:/iriswebapp/app/post_init.py:ro 
+      - ./iris/post_init.py:/iriswebapp/app/post_init.py:ro 
       - iris-downloads:/home/iris/downloads
       - user_templates:/home/iris/user_templates
       - server_data:/home/iris/server_data
