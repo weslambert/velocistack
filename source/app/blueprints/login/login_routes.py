@@ -24,17 +24,24 @@ from flask import Blueprint
 from flask import redirect
 from flask import render_template
 from flask import request
+from flask import session
 from flask import url_for
 from flask_login import current_user
 from flask_login import login_user
 
+from app import app
 from app import bc
 from app import db
-from app.datamgmt.case.case_db import case_exists
+
 from app.forms import LoginForm
+from app.iris_engine.access_control.ldap_handler import ldap_authenticate
+from app.iris_engine.access_control.utils import ac_get_effective_permissions_of_user
 from app.iris_engine.utils.tracker import track_activity
 from app.models.cases import Cases
-from app.models.models import User
+from app.models.authorization import User
+from app.util import is_authentication_ldap
+from app.datamgmt.manage.manage_users_db import get_active_user_by_login
+
 
 login_blueprint = Blueprint(
     'login',
@@ -42,58 +49,101 @@ login_blueprint = Blueprint(
     template_folder='templates'
 )
 
+log = app.logger
+
+
+# filter User out of database through username
+def _retrieve_user_by_username(username):
+    user = get_active_user_by_login(username)
+    if not user:
+        track_activity("someone tried to log in with user '{}', which does not exist".format(username),
+                       ctx_less=True, display_in_ui=False)
+    return user
+
+
+def _render_template_login(form, msg):
+    organisation_name = app.config.get('ORGANISATION_NAME')
+    login_banner = app.config.get('LOGIN_BANNER_TEXT')
+    ptfm_contact = app.config.get('LOGIN_PTFM_CONTACT')
+
+    return render_template('login.html', form=form, msg=msg, organisation_name=organisation_name,
+                           login_banner=login_banner, ptfm_contact=ptfm_contact)
+
+
+def _authenticate_ldap(form, username, password):
+    try:
+        if ldap_authenticate(username, password) is False:
+            track_activity("wrong login password for user '{}' using LDAP auth".format(username),
+                           ctx_less=True, display_in_ui=False)
+            return _render_template_login(form, 'Wrong credentials. Please try again.')
+
+        user = _retrieve_user_by_username(username)
+        if not user:
+            return _render_template_login(form, 'Wrong credentials. Please try again.')
+
+        return wrap_login_user(user)
+    except Exception as e:
+        log.error(e.__str__())
+        return _render_template_login(form, 'LDAP authentication unavailable. Check server logs')
+
+
+def _authenticate_password(form, username, password):
+    user = _retrieve_user_by_username(username)
+    if not user or user.is_service_account:
+        return _render_template_login(form, 'Wrong credentials. Please try again.')
+
+    if bc.check_password_hash(user.password, password):
+        return wrap_login_user(user)
+
+    track_activity("wrong login password for user '{}' using local auth".format(username), ctx_less=True,
+                   display_in_ui=False)
+    return _render_template_login(form, 'Wrong credentials. Please try again.')
+
 
 # CONTENT ------------------------------------------------
 # Authenticate user
-@login_blueprint.route('/login', methods=['GET', 'POST'])
-def login():
-    # cut the page for authenticated users
-    if current_user.is_authenticated:
-        return redirect(url_for('index.index'))
+if app.config.get("AUTHENTICATION_TYPE") in ["local", "ldap"]:
+    @login_blueprint.route('/login', methods=['GET', 'POST'])
+    def login():
+        session.permanent = True
 
-    # Declare the login form
-    form = LoginForm(request.form)
+        if current_user.is_authenticated:
+            return redirect(url_for('index.index'))
 
-    # Flask message injected into the page, in case of any errors
-    msg = None
-    c_exists = False
+        form = LoginForm(request.form)
 
-    # check if both http method is POST and form is valid on submit
-    if form.validate_on_submit():
+        # check if both http method is POST and form is valid on submit
+        if not form.is_submitted() and not form.validate():
+            return _render_template_login(form, None)
 
         # assign form data to variables
         username = request.form.get('username', '', type=str)
         password = request.form.get('password', '', type=str)
 
-        # filter User out of database through username
-        user = User.query.filter(
-            User.user == username,
-            User.active == True
-        ).first()
+        if is_authentication_ldap() is True:
+            return _authenticate_ldap(form, username, password)
 
-        if user:
-            if bc.check_password_hash(user.password, password):
-                login_user(user)
+        return _authenticate_password(form, username, password)
 
-                caseid = user.ctx_case
 
-                if caseid is not None:
-                    c_exists = case_exists(caseid=caseid)
+def wrap_login_user(user):
+    login_user(user)
 
-                if caseid is None or not c_exists:
-                    case = Cases.query.order_by(Cases.case_id).first()
-                    user.ctx_case = case.case_id
-                    user.ctx_human_case = case.name
+    track_activity("user '{}' successfully logged-in".format(user.user), ctx_less=True, display_in_ui=False)
+    caseid = user.ctx_case
+    session['permissions'] = ac_get_effective_permissions_of_user(user)
 
-                    db.session.commit()
+    if caseid is None:
+        case = Cases.query.order_by(Cases.case_id).first()
+        user.ctx_case = case.case_id
+        user.ctx_human_case = case.name
+        db.session.commit()
 
-                track_activity("user '{}' successfully logged-in".format(username), ctx_less=True)
-                return redirect(url_for('index.index', cid=user.ctx_case))
-            else:
-                track_activity("wrong login password for user '{}'".format(username), ctx_less=True)
-                msg = "Wrong password. Please try again."
-        else:
-            track_activity("someone tried to log with user '{}', which does not exist".format(username), ctx_less=True)
-            msg = "Unknown user"
+    session['current_case'] = {
+        'case_name': user.ctx_human_case,
+        'case_info': "",
+        'case_id': user.ctx_case
+    }
 
-    return render_template('login.html', form=form, msg=msg)
+    track_activity("user '{}' successfully logged-in".format(user), ctx_less=True, display_in_ui=False)
+    return redirect(url_for('index.index', cid=user.ctx_case))

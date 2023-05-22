@@ -9,20 +9,15 @@ Table = $("#activities_table").DataTable({
     bSort: false,
     aoColumns: [
       { "data": "activity_date",
-        "render": function (data, type, row, meta) {
-            if (type === 'display') { data = sanitizeHTML(data);}
-            return data;
-          } },
-      { "data": "user_name",
-        "render": function (data, type, row, meta) {
-            if (type === 'display') { data = sanitizeHTML(data);}
-            return data;
-          } },
+        "render":  $.fn.dataTable.render.text()
+      },
+        {
+            "data": "user_name",
+            "render": $.fn.dataTable.render.text()
+        },
       { "data": "case_name",
-        "render": function (data, type, row, meta) {
-            if (type === 'display') { data = sanitizeHTML(data);}
-            return data;
-          } },
+        "render": $.fn.dataTable.render.text()
+      },
       { "data": "user_input",
         "render": function (data, type, row, meta) {
             if (type === 'display') {
@@ -47,17 +42,15 @@ Table = $("#activities_table").DataTable({
         return data;
       } },
       { "data": "activity_desc",
-        "render": function (data, type, row, meta) {
-            if (type === 'display') { data = sanitizeHTML(data);}
-            return data;
-          } }
+        "render": $.fn.dataTable.render.text()
+      }
     ],
     filter: true,
     info: true,
     processing: true,
     retrieve: true,
     initComplete: function () {
-        tableFiltering(this.api());
+        tableFiltering(this.api(), 'activities_table');
     },
     buttons: [
     { "extend": 'csvHtml5', "text":'Export',"className": 'btn btn-primary btn-border btn-round btn-sm float-left mr-4 mt-2' },
@@ -66,7 +59,6 @@ Table = $("#activities_table").DataTable({
 });
 $("#activities_table").css("font-size", 12);
 
-
 function refresh_activities() {
     get_activities ();
     notify_success('Refreshed');
@@ -74,8 +66,15 @@ function refresh_activities() {
 
 function get_activities () {
     show_loader();
-    get_request_api('/activities/list')
+    if ($('#non_case_related_act').is(':checked')) {
+        url = '/activities/list-all';
+    } else {
+        url = '/activities/list';
+    }
+
+    get_request_api(url)
     .done((data) => {
+        if(notify_auto_api(data, true)) {
             jsdata = data;
             if (jsdata.status == "success") {
                   Table.clear();
@@ -84,9 +83,17 @@ function get_activities () {
                   Table.buttons().container().appendTo($('#activities_table_info'));
                 hide_loader();
             }
-        })
+        }
+    }).fail((data) => {
+        hide_loader();
+        Table.clear();
+        Table.columns.adjust().draw();
+    });
 }
 
 $(document).ready(function(){
     get_activities();
+    $('#non_case_related_act').on('change', function() {
+        get_activities();
+    });
 });

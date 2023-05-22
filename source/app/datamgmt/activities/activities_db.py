@@ -22,7 +22,7 @@ from sqlalchemy import and_
 from sqlalchemy import desc
 
 from app.models import Cases
-from app.models.models import User
+from app.models.authorization import User
 from app.models.models import UserActivity
 
 
@@ -83,7 +83,28 @@ def get_manual_activities(caseid):
     return manual_activities
 
 
-def get_all_user_activities():
+def get_users_activities():
+    user_activities = UserActivity.query.with_entities(
+        Cases.name.label("case_name"),
+        User.name.label("user_name"),
+        UserActivity.user_id,
+        UserActivity.case_id,
+        UserActivity.activity_date,
+        UserActivity.activity_desc,
+        UserActivity.user_input,
+        UserActivity.is_from_api
+    ).filter(
+        UserActivity.display_in_ui == True
+    ).outerjoin(
+        UserActivity.user
+    ).outerjoin(
+        UserActivity.case
+    ).order_by(desc(UserActivity.activity_date)).limit(10000).all()
+
+    return user_activities
+
+
+def get_all_users_activities():
     user_activities = UserActivity.query.with_entities(
         Cases.name.label("case_name"),
         User.name.label("user_name"),
@@ -104,8 +125,8 @@ def get_all_user_activities():
         UserActivity.activity_desc,
         UserActivity.user_input,
         UserActivity.is_from_api
-    ).filter(
+    ).filter(and_(
         UserActivity.case_id == None
-    ).order_by(desc(UserActivity.activity_date)).limit(10000).all()
+    )).order_by(desc(UserActivity.activity_date)).limit(10000).all()
 
     return user_activities

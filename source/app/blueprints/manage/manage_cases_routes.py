@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 #
 #  IRIS Source Code
-#  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
-#  ir@cyberactionlab.net
+#  contact@dfir-iris.org
 #
 #  This program is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU Lesser General Public
@@ -17,41 +16,64 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-
-import traceback
+from typing import Union
 
 import logging as log
-import marshmallow
 # IMPORTS ------------------------------------------------
 import os
+import traceback
 import urllib.parse
+
+import marshmallow
 from flask import Blueprint
 from flask import redirect
 from flask import render_template
 from flask import request
 from flask import url_for
+from flask_login import current_user
+from flask_wtf import FlaskForm
+from werkzeug import Response
 
+import app
+from app import db
+from app.datamgmt.alerts.alerts_db import get_alert_status_by_name
 from app.datamgmt.case.case_db import get_case
+from app.datamgmt.case.case_db import register_case_protagonists
+from app.datamgmt.case.case_db import save_case_tags
 from app.datamgmt.iris_engine.modules_db import get_pipelines_args_from_name
 from app.datamgmt.iris_engine.modules_db import iris_module_exists
 from app.datamgmt.manage.manage_attribute_db import get_default_custom_attributes
+from app.datamgmt.manage.manage_case_classifications_db import get_case_classifications_list
+from app.datamgmt.manage.manage_case_state_db import get_case_states_list, get_case_state_by_name
+from app.datamgmt.manage.manage_case_templates_db import get_case_templates_list, case_template_pre_modifier, \
+    case_template_post_modifier
 from app.datamgmt.manage.manage_cases_db import close_case
 from app.datamgmt.manage.manage_cases_db import delete_case
 from app.datamgmt.manage.manage_cases_db import get_case_details_rt
+from app.datamgmt.manage.manage_cases_db import get_case_protagonists
 from app.datamgmt.manage.manage_cases_db import list_cases_dict
 from app.datamgmt.manage.manage_cases_db import reopen_case
+from app.datamgmt.manage.manage_users_db import get_user_organisations
 from app.forms import AddCaseForm
+from app.iris_engine.access_control.utils import ac_fast_check_current_user_has_case_access
+from app.iris_engine.access_control.utils import ac_fast_check_user_has_case_access
+from app.iris_engine.access_control.utils import ac_set_new_case_access
 from app.iris_engine.module_handler.module_handler import call_modules_hook
 from app.iris_engine.module_handler.module_handler import configure_module_on_init
 from app.iris_engine.module_handler.module_handler import instantiate_module_from_name
-from app.iris_engine.module_handler.module_handler import list_available_pipelines
 from app.iris_engine.tasker.tasks import task_case_update
 from app.iris_engine.utils.common import build_upload_path
 from app.iris_engine.utils.tracker import track_activity
+from app.models.alerts import AlertStatus
+from app.models.authorization import CaseAccessLevel
+from app.models.authorization import Permissions
 from app.models.models import Client
 from app.schema.marshables import CaseSchema
-from app.util import api_login_required
-from app.util import login_required
+from app.util import ac_api_case_requires, add_obj_history_entry
+from app.util import ac_api_requires
+from app.util import ac_api_return_access_denied
+from app.util import ac_case_requires
+from app.util import ac_requires
 from app.util import response_error
 from app.util import response_success
 
@@ -61,57 +83,116 @@ manage_cases_blueprint = Blueprint('manage_case',
 
 
 # CONTENT ------------------------------------------------
+@manage_cases_blueprint.route('/manage/cases', methods=['GET'])
+@ac_requires(Permissions.standard_user, no_cid_required=True)
+def manage_index_cases(caseid, url_redir):
+    if url_redir:
+        return redirect(url_for('manage_case.manage_index_cases', cid=caseid))
+
+    form = AddCaseForm()
+    # Fill select form field customer with the available customers in DB
+    form.case_customer.choices = [(c.client_id, c.name) for c in
+                                  Client.query.order_by(Client.name)]
+
+    form.case_organisations.choices = [(org['org_id'], org['org_name']) for org in
+                                       get_user_organisations(current_user.id)]
+    form.classification_id.choices = [(clc['id'], clc['name_expanded']) for clc in get_case_classifications_list()]
+    form.case_template_id.choices = [(ctp['id'], ctp['display_name']) for ctp in get_case_templates_list()]
+
+    attributes = get_default_custom_attributes('case')
+
+    return render_template('manage_cases.html', form=form, attributes=attributes)
+
+
 @manage_cases_blueprint.route('/manage/cases/details/<int:cur_id>', methods=['GET'])
-@login_required
-def details_case(cur_id, caseid, url_redir):
+@ac_requires(no_cid_required=True)
+def details_case(cur_id: int, caseid: int, url_redir: bool) -> Union[Response, str]:
+    """
+    Get case details
+
+    Args:
+        cur_id (int): case id
+        caseid (int): case id
+        url_redir (bool): url redirection
+
+    Returns:
+        Union[str, Response]: The case details
+    """
     if url_redir:
         return response_error("Invalid request")
 
+    if not ac_fast_check_user_has_case_access(current_user.id, cur_id, [CaseAccessLevel.read_only,
+                                                                        CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=cur_id)
+
     res = get_case_details_rt(cur_id)
+    case_classifications = get_case_classifications_list()
+    case_states = get_case_states_list()
+    form = FlaskForm()
 
     if res:
-        return render_template("modal_case_info.html", data=res)
+        return render_template("modal_case_info_from_case.html", data=res, form=form, protagnists=None,
+                               case_classifications=case_classifications, case_states=case_states)
 
     else:
         return response_error("Unknown case")
 
 
 @manage_cases_blueprint.route('/case/details/<int:cur_id>', methods=['GET'])
-@login_required
-def details_case_from_case(cur_id, caseid, url_redir):
+@ac_requires(no_cid_required=True)
+def details_case_from_case_modal(cur_id: int, caseid: int, url_redir: bool) -> Union[str, Response]:
+    """ Returns the case details modal for a case from a case
+
+    Args:
+        cur_id (int): The case id
+        caseid (int): The case id
+        url_redir (bool): If the request is a url redirect
+
+    Returns:
+        Union[str, Response]: The case details modal
+    """
     if url_redir:
         return response_error("Invalid request")
 
+    if not ac_fast_check_current_user_has_case_access(cur_id, [CaseAccessLevel.read_only, CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=cur_id)
+
     res = get_case_details_rt(cur_id)
+    case_classifications = get_case_classifications_list()
+    case_states = get_case_states_list()
+
+    protagonists = get_case_protagonists(cur_id)
+
+    form = FlaskForm()
 
     if res:
-        return render_template("modal_case_info_from_case.html", data=res)
+        return render_template("modal_case_info_from_case.html", data=res, form=form, protagonists=protagonists,
+                               case_classifications=case_classifications, case_states=case_states)
 
     else:
         return response_error("Unknown case")
 
 
 @manage_cases_blueprint.route('/manage/cases/<int:cur_id>', methods=['GET'])
-@api_login_required
+@ac_api_requires(no_cid_required=True)
 def get_case_api(cur_id, caseid):
+    if not ac_fast_check_current_user_has_case_access(cur_id, [CaseAccessLevel.read_only, CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=cur_id)
 
     res = get_case_details_rt(cur_id)
     if res:
-        return response_success(data=res._asdict())
+        return response_success(data=res)
 
     return response_error(f'Case ID {cur_id} not found')
 
 
-@manage_cases_blueprint.route('/manage/cases/delete/<int:cur_id>', methods=['GET'])
-@api_login_required
+@manage_cases_blueprint.route('/manage/cases/delete/<int:cur_id>', methods=['POST'])
+@ac_api_requires(Permissions.standard_user, no_cid_required=True)
 def api_delete_case(cur_id, caseid):
+    if not ac_fast_check_current_user_has_case_access(cur_id, [CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=cur_id)
 
-    if cur_id == caseid:
-        track_activity("tried to delete case {}, but case was the context".format(cur_id),
-                       caseid=caseid, ctx_less=True)
-
-        return response_error("Cannot delete a case which is the current context")
-    elif cur_id == 1:
+    if cur_id == 1:
         track_activity("tried to delete case {}, but case is the primary case".format(cur_id),
                        caseid=caseid, ctx_less=True)
 
@@ -124,7 +205,7 @@ def api_delete_case(cur_id, caseid):
 
                 call_modules_hook('on_postload_case_delete', data=cur_id, caseid=caseid)
 
-                track_activity("case {} deleted successfully".format(cur_id), caseid=caseid, ctx_less=True)
+                track_activity("case {} deleted successfully".format(cur_id), ctx_less=True)
                 return response_success("Case successfully deleted")
 
             else:
@@ -134,105 +215,189 @@ def api_delete_case(cur_id, caseid):
                 return response_error("Tried to delete a non-existing case")
 
         except Exception as e:
-            return response_error("Cannot delete a non empty case. {}".format(e))
+            app.app.logger.exception(e)
+            return response_error("Cannot delete the case. Please check server logs for additional informations")
 
 
-@manage_cases_blueprint.route('/manage/cases/reopen/<int:cur_id>', methods=['GET'])
-@api_login_required
+@manage_cases_blueprint.route('/manage/cases/reopen/<int:cur_id>', methods=['POST'])
+@ac_api_requires(Permissions.standard_user, no_cid_required=True)
 def api_reopen_case(cur_id, caseid):
+    if not ac_fast_check_current_user_has_case_access(cur_id, [CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=cur_id)
 
     if not cur_id:
         return response_error("No case ID provided")
+
+    case = get_case(cur_id)
+    if not case:
+        return response_error("Tried to reopen an non-existing case")
 
     res = reopen_case(cur_id)
     if not res:
         return response_error("Tried to reopen an non-existing case")
 
-    track_activity("reopened case ID {}".format(cur_id), caseid=caseid, ctx_less=True)
+    # Reopen the related alerts
+    if case.alerts:
+        merged_status = get_alert_status_by_name('Merged')
+        for alert in case.alerts:
+            if alert.alert_status_id != merged_status.status_id:
+                alert.alert_status_id = merged_status.status_id
+                track_activity(f"alert ID {alert.alert_id} status updated to merged due to case #{caseid} being reopened",
+                               caseid=caseid, ctx_less=False)
+
+                db.session.add(alert)
+    
+    case = call_modules_hook('on_postload_case_info_update', data=case, caseid=caseid)
+
+    add_obj_history_entry(case, 'case reopened')
+    track_activity("reopened case ID {}".format(cur_id), caseid=caseid)
     case_schema = CaseSchema()
 
     return response_success("Case reopened successfully", data=case_schema.dump(res))
 
 
-@manage_cases_blueprint.route('/manage/cases/close/<int:cur_id>', methods=['GET'])
-@api_login_required
-def api_delete_close(cur_id, caseid):
+@manage_cases_blueprint.route('/manage/cases/close/<int:cur_id>', methods=['POST'])
+@ac_api_requires(Permissions.standard_user, no_cid_required=True)
+def api_case_close(cur_id, caseid):
+    if not ac_fast_check_current_user_has_case_access(cur_id, [CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=cur_id)
 
     if not cur_id:
         return response_error("No case ID provided")
+
+    case = get_case(cur_id)
+    if not case:
+        return response_error("Tried to close an non-existing case")
 
     res = close_case(cur_id)
     if not res:
         return response_error("Tried to close an non-existing case")
 
-    track_activity("closed case ID {}".format(cur_id), caseid=caseid, ctx_less=True)
+    # Close the related alerts
+    if case.alerts:
+        close_status = get_alert_status_by_name('Closed')
+        for alert in case.alerts:
+            if alert.alert_status_id != close_status.status_id:
+                alert.alert_status_id = close_status.status_id
+                track_activity(f"closing alert ID {alert.alert_id} due to case #{caseid} being closed",
+                               caseid=caseid, ctx_less=False)
+
+                db.session.add(alert)
+    
+    case = call_modules_hook('on_postload_case_info_update', data=case, caseid=caseid)
+
+    add_obj_history_entry(case, 'case closed')
+    track_activity("closed case ID {}".format(cur_id), caseid=caseid, ctx_less=False)
     case_schema = CaseSchema()
 
     return response_success("Case closed successfully", data=case_schema.dump(res))
 
 
 @manage_cases_blueprint.route('/manage/cases/add', methods=['POST'])
-@api_login_required
+@ac_api_requires(Permissions.standard_user, no_cid_required=True)
 def api_add_case(caseid):
-
     case_schema = CaseSchema()
 
     try:
 
         request_data = call_modules_hook('on_preload_case_create', data=request.get_json(), caseid=caseid)
+        case_template_id = request_data.pop("case_template_id", None)
+
         case = case_schema.load(request_data)
+        case.owner_id = current_user.id
+
+        if case_template_id and len(case_template_id) > 0:
+            case = case_template_pre_modifier(case, case_template_id)
+            if case is None:
+                return response_error(msg=f"Invalid Case template ID {case_template_id}", status=400)
+
+        case.state_id = get_case_state_by_name('Opened').state_id
 
         case.save()
 
+        if case_template_id and len(case_template_id) > 0:
+            try:
+                case, logs = case_template_post_modifier(case, case_template_id)
+                if len(logs) > 0:
+                    return response_error(msg=f"Could not update new case with {case_template_id}", data=logs, status=400)
+            except Exception as e:
+                log.error(e.__str__())
+                return response_error(msg=f"Unexpected error when loading template {case_template_id} to new case.",
+                                      status=400)
+
+        ac_set_new_case_access(None, case.case_id)
+
         case = call_modules_hook('on_postload_case_create', data=case, caseid=caseid)
 
-        track_activity("New case {case_name} created".format(case_name=case.name), caseid=caseid, ctx_less=True)
+        add_obj_history_entry(case, 'created')
+        track_activity("new case {case_name} created".format(case_name=case.name), caseid=case.case_id, ctx_less=False)
 
     except marshmallow.exceptions.ValidationError as e:
         return response_error(msg="Data error", data=e.messages, status=400)
+
     except Exception as e:
-        return response_error(msg="Data error", data=e.__str__(), status=400)
+        log.error(e.__str__())
+        log.error(traceback.format_exc())
+        return response_error(msg="Error creating case - check server logs", status=400)
 
     return response_success(msg='Case created', data=case_schema.dump(case))
 
 
 @manage_cases_blueprint.route('/manage/cases/list', methods=['GET'])
-@api_login_required
+@ac_api_requires(Permissions.standard_user, no_cid_required=True)
 def api_list_case(caseid):
-
-    data = list_cases_dict()
+    data = list_cases_dict(current_user.id)
 
     return response_success("", data=data)
 
 
-@manage_cases_blueprint.route('/manage/cases', methods=['GET'])
-@login_required
-def manage_index_cases(caseid, url_redir):
-    if url_redir:
-        return redirect(url_for('manage_case.manage_index_cases', cid=caseid))
+@manage_cases_blueprint.route('/manage/cases/update/<int:cur_id>', methods=['POST'])
+@ac_api_requires(Permissions.standard_user, no_cid_required=True)
+def update_case_info(cur_id, caseid):
+    if not ac_fast_check_current_user_has_case_access(cur_id, [CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=cur_id)
 
-    form = AddCaseForm()
-    # Fill select form field customer with the available customers in DB
-    form.case_customer.choices = [(c.client_id , c.name) for c in
-                                  Client.query.order_by(Client.name)]
+    case_schema = CaseSchema()
 
-    pl = list_available_pipelines()
+    case_i = get_case(cur_id)
+    if not case_i:
+        return response_error("Case not found")
 
-    form.pipeline.choices = [("{}-{}".format(ap[0], ap[1]['pipeline_internal_name']),
-                                         ap[1]['pipeline_human_name'])for ap in pl]
+    try:
 
-    # Return default page of case management
-    pipeline_args = [("{}-{}".format(ap[0], ap[1]['pipeline_internal_name']),
-                      ap[1]['pipeline_human_name'], ap[1]['pipeline_args'])for ap in pl]
+        request_data = request.get_json()
 
-    attributes = get_default_custom_attributes('case')
+        request_data['case_name'] = f"#{case_i.case_id} - {request_data.get('case_name')}"
+        request_data['case_customer'] = case_i.client_id
 
-    return render_template('manage_cases.html', form=form, pipeline_args=pipeline_args, attributes=attributes)
+        case = case_schema.load(request_data, instance=case_i, partial=True)
+
+        db.session.commit()
+
+        register_case_protagonists(case.case_id, request_data.get('protagonists'))
+        save_case_tags(request_data.get('case_tags'), case_i)
+
+        case = call_modules_hook('on_postload_case_info_update', data=case, caseid=caseid)
+
+        add_obj_history_entry(case_i, 'case info updated')
+        track_activity("case updated {case_name}".format(case_name=case.name), caseid=cur_id)
+
+    except marshmallow.exceptions.ValidationError as e:
+        return response_error(msg="Data error", data=e.messages, status=400)
+    except Exception as e:
+        log.error(e.__str__())
+        log.error(traceback.format_exc())
+        return response_error(msg="Error updating case - check server logs", status=400)
+
+    return response_success(msg='Case updated', data=case_schema.dump(case))
 
 
-@manage_cases_blueprint.route('/manage/cases/update', methods=['POST'])
-@api_login_required
+@manage_cases_blueprint.route('/manage/cases/trigger-pipeline', methods=['POST'])
+@ac_api_requires(Permissions.standard_user)
 def update_case_files(caseid):
+    if not ac_fast_check_current_user_has_case_access(caseid, [CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=caseid)
+
     # case update request. The files should have already arrived with the request upload_files
     try:
         # Create the update task
@@ -289,13 +454,15 @@ def update_case_files(caseid):
 
 
 @manage_cases_blueprint.route('/manage/cases/upload_files', methods=['POST'])
-@api_login_required
+@ac_api_requires(Permissions.standard_user)
 def manage_cases_uploadfiles(caseid):
     """
     Handles the entire the case management, i.e creation, update, list and files imports
     :param path: Path within the URL
     :return: Depends on the path, either a page a JSON
     """
+    if not ac_fast_check_current_user_has_case_access(caseid, [CaseAccessLevel.full_access]):
+        return ac_api_return_access_denied(caseid=caseid)
 
     # Files uploads of a case. Get the files, create the folder tree
     # The request "add" will start the check + import of the files.

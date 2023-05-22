@@ -45,8 +45,12 @@ from app.models import IrisHook
 from app.models import IrisModule
 from app.models import IrisModuleHook
 from app.models import Notes
-from app.util import api_login_required
-from app.util import login_required
+from app.models.authorization import CaseAccessLevel
+from app.models.authorization import Permissions
+from app.util import ac_api_case_requires
+from app.util import ac_api_requires
+from app.util import ac_case_requires
+from app.util import ac_requires
 from app.util import response_error
 from app.util import response_success
 from iris_interface.IrisInterfaceStatus import IIStatus
@@ -62,7 +66,7 @@ basedir = os.path.abspath(os.path.dirname(app.__file__))
 
 # CONTENT ------------------------------------------------
 @dim_tasks_blueprint.route('/dim/tasks', methods=['GET'])
-@login_required
+@ac_requires(Permissions.standard_user)
 def dim_index(caseid: int, url_redir):
     if url_redir:
         return redirect(url_for('dim.dim_index', cid=caseid))
@@ -72,15 +76,15 @@ def dim_index(caseid: int, url_redir):
     return render_template('dim_tasks.html', form=form)
 
 
-@dim_tasks_blueprint.route('/dim/hooks/options/<type>/list', methods=['GET'])
-@api_login_required
-def list_dim_hook_options_ioc(type, caseid):
+@dim_tasks_blueprint.route('/dim/hooks/options/<hook_type>/list', methods=['GET'])
+@ac_api_requires()
+def list_dim_hook_options_ioc(hook_type, caseid):
     mods_options = IrisModuleHook.query.with_entities(
         IrisModuleHook.manual_hook_ui_name,
         IrisHook.hook_name,
         IrisModule.module_name
     ).filter(
-        IrisHook.hook_name == f"on_manual_trigger_{type}",
+        IrisHook.hook_name == f"on_manual_trigger_{hook_type}",
         IrisModule.is_active == True
     ).join(
         IrisModuleHook.module,
@@ -93,10 +97,13 @@ def list_dim_hook_options_ioc(type, caseid):
 
 
 @dim_tasks_blueprint.route('/dim/hooks/call', methods=['POST'])
-@api_login_required
+@ac_api_case_requires(CaseAccessLevel.full_access)
 def dim_hooks_call(caseid):
     logs = []
     js_data = request.json
+
+    print(js_data)
+
     if not js_data:
         return response_error('Invalid data')
 
@@ -105,8 +112,6 @@ def dim_hooks_call(caseid):
         return response_error('Missing hook_name')
 
     hook_ui_name = js_data.get('hook_ui_name')
-    if not hook_ui_name:
-        return response_error('Missing hook_ui_name')
 
     targets = js_data.get('targets')
     if not targets:
@@ -115,6 +120,8 @@ def dim_hooks_call(caseid):
     data_type = js_data.get('type')
     if not data_type:
         return response_error('Missing data type')
+
+    module_name = js_data.get('module_name')
 
     index = 0
     obj_targets = []
@@ -174,7 +181,8 @@ def dim_hooks_call(caseid):
         index += 1
 
     if len(obj_targets) > 0:
-        call_modules_hook(hook_name=hook_name, hook_ui_name=hook_ui_name, data=obj_targets, caseid=caseid)
+        call_modules_hook(hook_name=hook_name, hook_ui_name=hook_ui_name, data=obj_targets,
+                          caseid=caseid, module_name=module_name)
 
     if len(logs) > 0:
         return response_error(f"Errors encountered during processing of data. Queued task with {index} objects",
@@ -184,7 +192,7 @@ def dim_hooks_call(caseid):
 
 
 @dim_tasks_blueprint.route('/dim/tasks/list/<int:count>', methods=['GET'])
-@api_login_required
+@ac_api_requires()
 def list_dim_tasks(count, caseid):
     tasks = CeleryTaskMeta.query.filter(
         ~ CeleryTaskMeta.name.like('app.iris_engine.updater.updater.%')
@@ -247,7 +255,7 @@ def list_dim_tasks(count, caseid):
 
 
 @dim_tasks_blueprint.route('/dim/tasks/status/<task_id>', methods=['GET'])
-@login_required
+@ac_case_requires(CaseAccessLevel.read_only, CaseAccessLevel.full_access)
 def task_status(task_id, caseid, url_redir):
     if url_redir:
         return response_error("Invalid request")

@@ -1,6 +1,5 @@
 # Velocistack
-
-![image](https://user-images.githubusercontent.com/16829864/190757428-51012a52-13d5-429e-837f-3215a64598a8.png)
+![image](https://user-images.githubusercontent.com/16829864/191647658-5379ea3d-476d-4959-87ee-e8ad0107115e.png)
 
 ## Introduction
 ### What is Velocistack?
@@ -22,6 +21,28 @@ To allow individuals to quickly spin up a local, integrated environment for anal
 - Incident Responders
 - Students
 - Anyone!
+
+## Screenshots
+### Landing Page
+![image](https://user-images.githubusercontent.com/16829864/190757428-51012a52-13d5-429e-837f-3215a64598a8.png)
+
+### CyberChef
+![image](https://user-images.githubusercontent.com/16829864/191644980-52b65fa7-6940-40fa-8d3d-966602aa66f1.png)
+
+![image](https://user-images.githubusercontent.com/16829864/191645908-ed16ee29-1604-4cb9-9eba-72d1fd544fbd.png)
+
+### Grafana
+![image](https://user-images.githubusercontent.com/16829864/191645061-e0bd7597-5d2a-4bb5-b26c-6ec3bd5c41e1.png)
+
+### IntelOwl
+![image](https://user-images.githubusercontent.com/16829864/191645176-08ddbe91-b82e-439b-80a4-babc132cc588.png)
+
+### IRIS
+![image](https://user-images.githubusercontent.com/16829864/191645234-762f709d-1a6e-4c77-967f-175d71cef830.png)
+
+### Kibana
+![image](https://user-images.githubusercontent.com/16829864/191645828-0a29ae0b-209b-48fc-a949-75e108c50b5c.png)
+
 
 ## Getting started
 ### Pre-reqs

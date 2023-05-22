@@ -1,8 +1,8 @@
-FROM ubuntu:18.04
-LABEL version="Velociraptor v0.6.1"
+FROM ubuntu:20.04
+LABEL version="Velociraptor v0.6.7"
 LABEL description="Velociraptor server in a Docker container"
 LABEL maintainer="Wes Lambert, @therealwlambert"
-ENV VERSION="0.6.1"
+ENV VERSION="0.6.7"
 COPY ./entrypoint .
 RUN chmod +x entrypoint && \
     apt-get update && \
@@ -24,9 +24,8 @@ RUN chmod +x entrypoint && \
     unzip -o /tmp/CyberChef.zip -d /opt/cyberchef && \
     mv /opt/cyberchef/CyberChef_v9.32.3.html /opt/cyberchef/index.html && \
     rm -f /tmp/CyberChef.zip && \
-    # Clean up 
+    # Clean up
     apt-get remove -y --purge curl wget jq && \
     apt-get clean
-WORKDIR /velociraptor 
+WORKDIR /velociraptor
 CMD ["/entrypoint"]
-
