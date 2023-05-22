@@ -26,6 +26,7 @@ services:
       - default
       - iris_frontend
   prometheus:
+    profiles: ["prometheus"]
     image: prom/prometheus:latest
     container_name: prometheus
     ports:
@@ -62,6 +63,7 @@ services:
     depends_on:
       - velociraptor
   grafana:
+    profiles: ["grafana"]
     image: grafana/grafana
     container_name: grafana
     ports:
@@ -189,17 +191,18 @@ services:
   db:
     container_name: iris-db
     profiles: ["iris"]
+    image: iriswebapp_db:v2.1.0-beta-1
     build:
-      context: docker/db
+      context: iris/docker/db/Dockerfile
     restart: always
     ports:
-      - "0.0.0.0:5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       - POSTGRES_PASSWORD
       - POSTGRES_USER
       - POSTGRES_DB
-      - DB_USER
-      - DB_PASS
+      - POSTGRES_ADMIN_USER
+      - POSTGRES_ADMIN_PASSWORD
     networks:
       - iris_backend
     volumes:
@@ -210,11 +213,11 @@ services:
     profiles: ["iris"]
     build:
       context: .
-      dockerfile: docker/webApp/Dockerfile
-    image: iriswebapp_app:latest
-    command: /bin/bash -c "until pg_isready --username=$DB_USER --host=db; do sleep 1; done && nohup ./iris-entrypoint.sh iriswebapp"
+      dockerfile: iris/docker/webApp/Dockerfile
+    image: iriswebapp_app:v2.1.0-beta-1
+    command: /bin/bash -c "until pg_isready --username=$POSTGRES_ADMIN_USER --host=db; do sleep 1; done && nohup ./iris-entrypoint.sh iriswebapp"
     volumes:
-      - ./source/app/post_init.py:/iriswebapp/app/post_init.py:ro 
+      - ./iris/source/app/post_init.py:/iriswebapp/app/post_init.py:ro 
       - iris-downloads:/home/iris/downloads
       - user_templates:/home/iris/user_templates
       - server_data:/home/iris/server_data
@@ -231,13 +234,13 @@ services:
       - POSTGRES_PASSWORD
       - POSTGRES_USER
       - POSTGRES_DB
-      - DB_USER
-      - DB_PASS
-      - DB_HOST
-      - DB_PORT
+      - POSTGRES_ADMIN_USER
+      - POSTGRES_ADMIN_PASSWORD
+      - POSTGRES_SERVER
+      - POSTGRES_PORT
       - DOCKERIZED
-      - SECRET_KEY
-      - SECURITY_PASSWORD_SALT
+      - IRIS_SECRET_KEY
+      - IRIS_SECURITY_PASSWORD_SALT
       - IRIS_ADM_PASSWORD
     networks:
       - iris_backend
@@ -248,8 +251,8 @@ services:
     profiles: ["iris"]
     build:
       context: .
-      dockerfile: docker/webApp/Dockerfile
-    image: iriswebapp_app:latest
+      dockerfile: iris/docker/webApp/Dockerfile
+    image: iriswebapp_app:v2.1.0-beta-1
     command: ['./wait-for-iriswebapp.sh', 'app:8000', './iris-entrypoint.sh', 'iris-worker']
     volumes:
       - iris-downloads:/home/iris/downloads
@@ -266,10 +269,10 @@ services:
       - POSTGRES_PASSWORD
       - POSTGRES_USER
       - POSTGRES_DB
-      - DB_USER
-      - DB_PASS
-      - DB_HOST
-      - DB_PORT
+      - POSTGRES_ADMIN_USER
+      - POSTGRES_ADMIN_PASSWORD
+      - POSTGRES_SERVER
+      - POSTGRES_PORT
       - DOCKERIZED
       - IRIS_WORKER
     networks:
