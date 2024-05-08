@@ -4,7 +4,7 @@
 			<!-- Logo Header -->
 			<div class="logo-header" data-background-color="blue">
 				<a href="/dashboard?cid={{ session['current_case'].case_id }}" class="logo ml-2">
-					<img src="/static/assets/img/logo-white-2.png" alt="navbar brand" class="navbar-brand" width="100">
+					<img src="/static/assets/img/logo-white.png" alt="navbar brand" class="navbar-brand" width="100">
 
 				</a>
 				<button class="navbar-toggler sidenav-toggler ml-auto" type="button" data-toggle="collapse" data-target="collapse" aria-expanded="false" aria-label="Toggle navigation">
@@ -68,6 +68,11 @@
 						<li class="nav-item hidden-caret">
 							<a href="#" title="Datastore" class="nav-link ds-sidebar-toggler" onclick="load_datastore();">
 								<i class="flaticon-database"></i>
+							</a>
+						</li>
+						<li class="nav-item hidden-caret">
+							<a class="nav-link" data-toggle="modal" title="Create case" onclick="load_add_case();">
+								<i class="flaticon-add"></i>
 							</a>
 						</li>
 						<li class="nav-item hidden-caret">

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -82,6 +80,11 @@ class CaseClassificationForm(FlaskForm):
     name = StringField(u'Case classification name', validators=[DataRequired()])
     name_expanded = StringField(u'Case classification name expanded', validators=[DataRequired()])
     description = StringField(u'Case classification description', validators=[DataRequired()])
+
+
+class EvidenceTypeForm(FlaskForm):
+    name = StringField(u'Evidence type name', validators=[DataRequired()])
+    description = StringField(u'Evidence type description', validators=[DataRequired()])
 
 
 class CaseStateForm(FlaskForm):

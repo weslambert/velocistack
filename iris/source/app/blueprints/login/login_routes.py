@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -17,6 +15,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+from urllib.parse import urlsplit
 
 # IMPORTS ------------------------------------------------
 
@@ -38,7 +37,6 @@ from app.iris_engine.access_control.ldap_handler import ldap_authenticate
 from app.iris_engine.access_control.utils import ac_get_effective_permissions_of_user
 from app.iris_engine.utils.tracker import track_activity
 from app.models.cases import Cases
-from app.models.authorization import User
 from app.util import is_authentication_ldap
 from app.datamgmt.manage.manage_users_db import get_active_user_by_login
 
@@ -70,9 +68,15 @@ def _render_template_login(form, msg):
                            login_banner=login_banner, ptfm_contact=ptfm_contact)
 
 
-def _authenticate_ldap(form, username, password):
+def _authenticate_ldap(form, username, password, local_fallback=True):
     try:
         if ldap_authenticate(username, password) is False:
+            if local_fallback is True:
+                track_activity("wrong login password for user '{}' using LDAP auth - falling back to local based on settings".format(username),
+                                 ctx_less=True, display_in_ui=False)
+                
+                return _authenticate_password(form, username, password)
+            
             track_activity("wrong login password for user '{}' using LDAP auth".format(username),
                            ctx_less=True, display_in_ui=False)
             return _render_template_login(form, 'Wrong credentials. Please try again.')
@@ -121,7 +125,7 @@ if app.config.get("AUTHENTICATION_TYPE") in ["local", "ldap"]:
         password = request.form.get('password', '', type=str)
 
         if is_authentication_ldap() is True:
-            return _authenticate_ldap(form, username, password)
+            return _authenticate_ldap(form, username, password, app.config.get('AUTHENTICATION_LOCAL_FALLBACK'))
 
         return _authenticate_password(form, username, password)
 
@@ -146,4 +150,12 @@ def wrap_login_user(user):
     }
 
     track_activity("user '{}' successfully logged-in".format(user), ctx_less=True, display_in_ui=False)
-    return redirect(url_for('index.index', cid=user.ctx_case))
+
+    next_url = None
+    if request.args.get('next'):
+        next_url = request.args.get('next') if 'cid=' in request.args.get('next') else request.args.get('next') + '?cid=' + str(user.ctx_case)
+
+    if not next_url or urlsplit(next_url).netloc != '':
+        next_url = url_for('index.index', cid=user.ctx_case)
+
+    return redirect(next_url)

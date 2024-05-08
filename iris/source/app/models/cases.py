@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -22,7 +20,7 @@ import uuid
 from datetime import datetime
 from flask_login import current_user
 # IMPORTS ------------------------------------------------
-from sqlalchemy import BigInteger, Table
+from sqlalchemy import BigInteger, Table, CheckConstraint
 from sqlalchemy import Boolean
 from sqlalchemy import Column
 from sqlalchemy import Date
@@ -36,7 +34,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app import db
 from app.datamgmt.states import update_assets_state
@@ -68,17 +66,25 @@ class Cases(db.Model):
     case_uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, server_default=text("gen_random_uuid()"),
                        nullable=False)
     classification_id = Column(ForeignKey('case_classification.id'))
+    reviewer_id = Column(ForeignKey('user.id'), nullable=True)
+    review_status_id = Column(ForeignKey('review_status.id'), nullable=True)
+    severity_id = Column(ForeignKey('severities.severity_id'), nullable=True)
+
     modification_history = Column(JSON)
 
     client = relationship('Client')
     user = relationship('User', foreign_keys=[user_id])
     owner = relationship('User', foreign_keys=[owner_id])
     classification = relationship('CaseClassification')
+    reviewer = relationship('User', foreign_keys=[reviewer_id])
+    severity = relationship('Severity')
 
     alerts = relationship('Alert', secondary="alert_case_association", back_populates='cases', viewonly=True)
 
     tags = relationship('Tags', secondary="case_tags", back_populates='cases')
     state = relationship('CaseState', back_populates='cases')
+
+    review_status = relationship('ReviewStatus')
 
     def __init__(self,
                  name=None,
@@ -90,7 +96,7 @@ class Cases(db.Model):
                  classification_id=None,
                  state_id=None
                  ):
-        self.name = name,
+        self.name = name[:200] if name else None,
         self.soc_id = soc_id,
         self.client_id = client_id,
         self.description = description,
@@ -164,6 +170,7 @@ class CasesEvent(db.Model):
     __tablename__ = "cases_events"
 
     event_id = Column(BigInteger, primary_key=True)
+    parent_event_id = Column(BigInteger, ForeignKey('cases_events.event_id'), nullable=True)
     event_uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, server_default=text("gen_random_uuid()"),
                         nullable=False)
     case_id = Column(ForeignKey('cases.case_id'))
@@ -190,6 +197,11 @@ class CasesEvent(db.Model):
                             primaryjoin="CasesEvent.event_id==CaseEventCategory.event_id",
                             secondaryjoin="CaseEventCategory.category_id==EventCategory.id",
                             viewonly=True)
+    children = relationship("CasesEvent", backref=backref('parent', remote_side=[event_id]))
+
+    __table_args__ = (
+        CheckConstraint('event_id != parent_event_id', name='check_different_ids'),
+    )
 
 
 class CaseState(db.Model):

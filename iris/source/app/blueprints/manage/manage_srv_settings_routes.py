@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -20,7 +18,6 @@
 
 # IMPORTS ------------------------------------------------
 
-import eventlet
 import marshmallow
 from flask import Blueprint
 from flask import render_template
@@ -52,15 +49,6 @@ manage_srv_settings_blueprint = Blueprint(
     __name__,
     template_folder='templates'
 )
-
-
-@manage_srv_settings_blueprint.route('/manage/server/start-update', methods=['GET'])
-@ac_api_requires(Permissions.server_administrator, no_cid_required=True)
-def manage_execute_update(caseid):
-
-    eventlet.spawn(inner_init_server_update)
-
-    return response_success()
 
 
 @manage_srv_settings_blueprint.route('/manage/server/make-update', methods=['GET'])

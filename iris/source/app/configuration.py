@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -206,12 +204,12 @@ class AuthenticationType(Enum):
 
 
 authentication_type = os.environ.get('IRIS_AUTHENTICATION_TYPE',
-                                     config.get('AUTHENTICATION', 'AUTHENTICATION_TYPE', fallback="local"))
+                                     config.get('IRIS', 'AUTHENTICATION_TYPE', fallback="local"))
 
 authentication_create_user_if_not_exists = config.load('IRIS', 'AUTHENTICATION_CREATE_USER_IF_NOT_EXIST')
 
 tls_root_ca = os.environ.get('TLS_ROOT_CA',
-                             config.get('AUTHENTICATION', 'TLS_ROOT_CA', fallback=None))
+                             config.get('IRIS', 'TLS_ROOT_CA', fallback=None))
 
 authentication_logout_url = None
 authentication_account_service_url = None
@@ -265,10 +263,13 @@ class CeleryConfig:
 # --------- APP ---------
 class Config:
     # Handled by bumpversion
-    IRIS_VERSION = "v2.1.0-beta-1"
+    IRIS_VERSION = "v2.4.7" # DO NOT EDIT THIS LINE MANUALLY
 
-    API_MIN_VERSION = "2.0.0"
-    API_MAX_VERSION = "2.0.1"
+    if os.environ.get('IRIS_DEMO_VERSION') is not None and os.environ.get('IRIS_DEMO_VERSION') != 'None':
+        IRIS_VERSION = os.environ.get('IRIS_DEMO_VERSION')
+
+    API_MIN_VERSION = "2.0.4"
+    API_MAX_VERSION = "2.0.5"
 
     MODULES_INTERFACE_MIN_VERSION = '1.1'
     MODULES_INTERFACE_MAX_VERSION = '1.2.0'
@@ -298,6 +299,9 @@ class Config:
     PG_SERVER = PG_SERVER_
     PG_PORT = PG_PORT_
     PG_DB = PG_DB_
+
+    DB_RETRY_COUNT = config.load('DB', 'RETRY_COUNT', fallback=3)
+    DB_RETRY_DELAY = config.load('DB', 'RETRY_DELAY', fallback=0.5)
 
     DEMO_MODE_ENABLED = config.load('IRIS_DEMO', 'ENABLED', fallback=False)
     if DEMO_MODE_ENABLED == 'True':
@@ -366,6 +370,8 @@ class Config:
 
     AUTHENTICATION_TYPE = authentication_type
     AUTHENTICATION_CREATE_USER_IF_NOT_EXIST = (authentication_create_user_if_not_exists == "True")
+    IRIS_NEW_USERS_DEFAULT_GROUP = config.load('IRIS', 'NEW_USERS_DEFAULT_GROUP', fallback='Analysts')
+    AUTHENTICATION_LOCAL_FALLBACK = config.load('IRIS', 'AUTHENTICATION_LOCAL_FALLBACK', fallback="True") == "True"
 
     if authentication_type == 'oidc_proxy':
         AUTHENTICATION_LOGOUT_URL = authentication_logout_url
@@ -404,7 +410,12 @@ class Config:
         LDAP_AUTHENTICATION_TYPE = config.load('LDAP', 'AUTHENTICATION_TYPE')
 
         LDAP_SEARCH_DN = config.load('LDAP', 'SEARCH_DN')
+        if authentication_create_user_if_not_exists and LDAP_SEARCH_DN is None:
+            raise Exception('LDAP enabled with user provisioning: LDAP_SEARCH_DN should be set')
         LDAP_ATTRIBUTE_IDENTIFIER = config.load('LDAP', 'ATTRIBUTE_IDENTIFIER')
+        if authentication_create_user_if_not_exists and LDAP_ATTRIBUTE_IDENTIFIER is None:
+            raise Exception('LDAP enabled with user provisioning: LDAP_ATTRIBUTE_IDENTIFIER should be set')
+
         LDAP_ATTRIBUTE_DISPLAY_NAME = config.load('LDAP', 'ATTRIBUTE_DISPLAY_NAME')
         LDAP_ATTRIBUTE_MAIL = config.load('LDAP', 'ATTRIBUTE_MAIL')
 

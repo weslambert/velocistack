@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -63,7 +61,7 @@ def iris_module_add(module_name, module_human_name, module_description,
     except Exception:
         return None
 
-    return im.id
+    return im
 
 
 def is_mod_configured(mod_config):
@@ -223,7 +221,8 @@ def module_list_hooks_view():
         IrisHook.hook_description,
         IrisModuleHook.is_manual_hook
     ).join(
-        IrisModuleHook.module,
+        IrisModuleHook.module
+    ).join(
         IrisModuleHook.hook
     ).all()
 

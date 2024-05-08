@@ -1,8 +1,9 @@
 /* remove user provided filter */
 function removeFilter(clickedObject) {
+    console.log("removeFilter")
     let inputObject = $(clickedObject)
                             .parents("table")
-                            .find("input")[$(clickedObject).parents("th").index()] 
+                            .find("input")[$(clickedObject).parents("th").index()]
     inputObject.value=""; // Clear input
     $(inputObject).trigger("change"); // trigger change event
 }
@@ -16,7 +17,7 @@ function addFilterFields(tableId){
 }
 
 /* callback function to activate filtering on a datatable */
-function tableFiltering(api, table_anchor) {
+function tableFiltering(api, table_anchor, exclude_columns=[]) {
     // For each column
     api
         .columns()
@@ -27,7 +28,11 @@ function tableFiltering(api, table_anchor) {
                 $(api.column(colIdx).header()).index()
             );
 
-            console.log(cell)
+            if (exclude_columns.includes(colIdx)) {
+                $(cell).html('<div class="form-group has-feedback" style="display: none;"><input type="text" class="form-control" placeholder="Filter"><i class="fas fa-times-circle form-control-feedback" onclick="removeFilter(this);"></i></div>');
+
+                return;
+            }
 
             $(cell).html('<div class="form-group has-feedback"><input type="text" class="form-control" placeholder="Filter"><i class="fas fa-times-circle form-control-feedback" onclick="removeFilter(this);"></i></div>');
             // On every keypress in this input

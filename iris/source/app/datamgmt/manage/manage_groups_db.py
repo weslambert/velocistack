@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  contact@dfir-iris.org
 #
@@ -78,6 +76,11 @@ def get_group(group_id):
     group = Group.query.filter(Group.group_id == group_id).first()
 
     return group
+
+
+def get_group_by_name(group_name):
+    groups = Group.query.filter(Group.group_name == group_name)
+    return groups.first()
 
 
 def get_group_with_members(group_id):

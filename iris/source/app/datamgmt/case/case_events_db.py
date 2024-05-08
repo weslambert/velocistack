@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -58,9 +56,11 @@ def get_case_events_assets_graph(caseid):
         CaseEventsAssets.case_id == caseid,
         CasesEvent.event_in_graph == True
     )).join(
-        CaseEventsAssets.event,
-        CaseEventsAssets.asset,
-        CaseAssets.asset_type,
+        CaseEventsAssets.event
+    ).join(
+        CaseEventsAssets.asset
+    ).join(
+        CaseAssets.asset_type
     ).all()
 
     return events
@@ -80,9 +80,11 @@ def get_case_events_ioc_graph(caseid):
         CaseEventsIoc.case_id == caseid,
         CasesEvent.event_in_graph == True
     )).join(
-        CaseEventsIoc.event,
-        CaseEventsIoc.ioc,
-        Ioc.ioc_type,
+        CaseEventsIoc.event
+    ).join(
+        CaseEventsIoc.ioc
+    ).join(
+        Ioc.ioc_type
     ).all()
 
     return events
@@ -149,7 +151,8 @@ def get_case_event_comment(event_id, comment_id, caseid):
         User.name,
         User.user
     ).join(
-        EventComments.comment,
+        EventComments.comment
+    ).join(
         Comments.user
     ).first()
 
@@ -237,11 +240,18 @@ def update_event_assets(event_id, caseid, assets_list, iocs_list, sync_iocs_asse
         CaseEventsAssets.case_id == caseid
     ).delete()
 
-    for asset in assets_list:
+    valid_assets = CaseAssets.query.with_entities(
+        CaseAssets.asset_id
+    ).filter(
+        CaseAssets.asset_id.in_(assets_list),
+        CaseAssets.case_id == caseid
+    ).all()
+
+    for asset in valid_assets:
         try:
 
             cea = CaseEventsAssets()
-            cea.asset_id = int(asset)
+            cea.asset_id = int(asset.asset_id)
             cea.event_id = event_id
             cea.case_id = caseid
 
@@ -250,14 +260,14 @@ def update_event_assets(event_id, caseid, assets_list, iocs_list, sync_iocs_asse
             if sync_iocs_assets:
                 for ioc in iocs_list:
                     link = IocAssetLink.query.filter(
-                        IocAssetLink.asset_id == int(asset),
+                        IocAssetLink.asset_id == int(asset.asset_id),
                         IocAssetLink.ioc_id == int(ioc)
                     ).first()
 
                     if link is None:
 
                         ial = IocAssetLink()
-                        ial.asset_id = int(asset)
+                        ial.asset_id = int(asset.asset_id)
                         ial.ioc_id = int(ioc)
 
                         db.session.add(ial)
@@ -276,11 +286,18 @@ def update_event_iocs(event_id, caseid, iocs_list):
         CaseEventsIoc.case_id == caseid
     ).delete()
 
-    for ioc in iocs_list:
+    valid_iocs = IocLink.query.with_entities(
+        IocLink.ioc_id
+    ).filter(
+        IocLink.ioc_id.in_(iocs_list),
+        IocLink.case_id == caseid
+    ).all()
+
+    for ioc in valid_iocs:
         try:
 
             cea = CaseEventsIoc()
-            cea.ioc_id = int(ioc)
+            cea.ioc_id = int(ioc.ioc_id)
             cea.event_id = event_id
             cea.case_id = caseid
 
@@ -370,3 +387,19 @@ def delete_event(event, caseid):
     update_timeline_state(caseid=caseid)
 
     db.session.commit()
+
+
+def get_category_by_name(cat_name):
+    return EventCategory.query.filter(
+        EventCategory.name  == cat_name,
+    ).first()
+
+
+def get_default_category():
+    return EventCategory.query.with_entities(
+        EventCategory.id,
+        EventCategory.name
+    ).filter(
+        EventCategory.name == "Unspecified"
+    ).first()
+

@@ -18,34 +18,40 @@ async function fetchMultipleAlerts(alertIds) {
 }
 
 const selectsConfig = {
-    alertStatusFilter: {
+    alert_status_id: {
         url: '/manage/alert-status/list',
         id: 'status_id',
         name: 'status_name',
     },
-    alertSeverityFilter: {
+    alert_severity_id: {
         url: '/manage/severities/list',
         id: 'severity_id',
         name: 'severity_name'
     },
-    alertClassificationFilter: {
+    alert_classification_id: {
         url: '/manage/case-classifications/list',
         id: 'id',
         name: 'name_expanded',
     },
-    alertCustomerFilter: {
+    alert_customer_id: {
         url: '/manage/customers/list',
         id: 'customer_id',
         name: 'customer_name'
     },
-    alertOwnerFilter: {
-        url: '/manage/users/list',
+    alert_owner_id: {
+        url: '/manage/users/restricted/list',
         id: 'user_id',
         name: 'user_name'
+    },
+    alert_resolution_id: {
+        url: '/manage/alert-resolutions/list',
+        id: 'resolution_status_id',
+        name: 'resolution_status_name'
     }
 };
 
 let alertStatusList = {};
+let alertResolutionList = {};
 
 function getAlertStatusList() {
     get_request_api('/manage/alert-status/list')
@@ -57,9 +63,27 @@ function getAlertStatusList() {
         });
 }
 
+function getAlertResolutionList() {
+    get_request_api('/manage/alert-resolutions/list')
+        .then((data) => {
+            if (!notify_auto_api(data, true)) {
+                return;
+            }
+            alertResolutionList = data.data;
+        });
+}
+
 function getAlertStatusId(statusName) {
     const status = alertStatusList.find((status) => status.status_name === statusName);
     return status ? status.status_id : undefined;
+}
+
+function getAlertResolutionId(resolutionName) {
+    if (alertResolutionList.length === undefined) {
+        getAlertResolutionList();
+    }
+    const resolution = alertResolutionList.find((resolution) => resolution.resolution_status_name.toLowerCase().replaceAll(' ', '_') === resolutionName);
+    return resolution ? resolution.resolution_status_id : undefined;
 }
 
 function appendLabels(list, items, itemType) {
@@ -68,12 +92,12 @@ function appendLabels(list, items, itemType) {
         const input = $('<input>').attr({
             type: 'checkbox',
             name: itemType,
-            value: item[itemType + '_name'] || item[itemType + '_value'],
+            value: filterXSS(item[itemType + '_name'] || item[itemType + '_value']),
             id: item[itemType + '_uuid'],
             checked: true,
         });
         label.append(input);
-        label.append(` ${item[itemType + '_name'] || item[itemType + '_value']}`);
+        label.append(`${filterXSS(item[itemType + '_name'] || item[itemType + '_value'])}`);
         list.append(label);
     });
 }
@@ -155,6 +179,9 @@ function mergeMultipleAlertsModal() {
                             type: 'GET',
                             dataType: 'json'
                         },
+                        minLength: 0,
+                        clearOnEmpty: false,
+                        emptyRequest: true,
                         locale: {
                             emptyTitle: 'Select and Begin Typing',
                             statusInitialized: '',
@@ -164,7 +191,7 @@ function mergeMultipleAlertsModal() {
                         },
                         preserveSelected: false
                     };
-                    get_request_api('/context/get-cases/100')
+                    get_request_api('/context/search-cases')
                         .done((data) => {
                             if (notify_auto_api(data, true)) {
                                 mergeAlertCasesSelectOption(data);
@@ -178,7 +205,7 @@ function mergeMultipleAlertsModal() {
                                         templateSelect.html('');
                                         templateSelect.append('<option value="">Select a template</option>');
                                         for (let i = 0; i < dataTemplate.length; i++) {
-                                            templateSelect.append(`<option value="${dataTemplate[i].id}">${dataTemplate[i].display_name}</option>`);
+                                            templateSelect.append(`<option value="${dataTemplate[i].id}">${filterXSS(dataTemplate[i].display_name)}</option>`);
                                         }
                                         templateSelect.selectpicker('refresh');
 
@@ -254,9 +281,10 @@ function mergeAlertModal(alert_id) {
         .then((data) => {
             alertDataReq = data;
             notify_auto_api(data, true);
+            let alert_title = filterXSS(alertDataReq.data.alert_title);
 
             $("#modalAlertId").val(alert_id);
-            $("#modalAlertTitle").val(alertDataReq.data.alert_title);
+            $("#modalAlertTitle").val(alert_title);
 
             // Configure the modal for both escalation and merging
             $('#escalateModalLabel').html(`Merge alert #${alert_id} in a new case`);
@@ -264,7 +292,7 @@ function mergeAlertModal(alert_id) {
 
             $('#escalateModalExplanation').text('This alert will be escalated into a new case. Set a title and select the IOCs and Assets to escalate into the case.');
 
-            $('#modalEscalateCaseTitle').val(`[ALERT] ${alertDataReq.data.alert_title}`);
+            $('#modalEscalateCaseTitle').val(`[ALERT] ${alert_title}`);
             $('#modalEscalateCaseTitleContainer').show();
 
             escalateButton.attr("data-merge", false);
@@ -285,17 +313,20 @@ function mergeAlertModal(alert_id) {
                     type: 'GET',
                     dataType: 'json'
                 },
+                minLength: 0,
+                clearOnEmpty: false,
+                emptyRequest: true,
                 locale: {
                     emptyTitle: 'Select and Begin Typing',
                     statusInitialized: '',
                 },
                 preprocessData: function (data) {
-                    return context_data_parser(data);
+                    return context_data_parser(data, false);
                 },
                 preserveSelected: false
             };
 
-            get_request_api('/context/get-cases/100')
+            get_request_api('/context/search-cases')
             .done((data) => {
                 if (notify_auto_api(data, true)) {
                     mergeAlertCasesSelectOption(data);
@@ -309,7 +340,7 @@ function mergeAlertModal(alert_id) {
                             templateSelect.html('');
                             templateSelect.append('<option value="">Select a template</option>');
                             for (let i = 0; i < data.length; i++) {
-                                templateSelect.append(`<option value="${data[i].id}">${data[i].display_name}</option>`);
+                                templateSelect.append(`<option value="${data[i].id}">${filterXSS(data[i].display_name)}</option>`);
                             }
                             templateSelect.selectpicker('refresh');
 
@@ -395,13 +426,13 @@ function mergeAlertCasesSelectOption(data) {
     if(notify_auto_api(data, true)) {
         $('#mergeAlertCaseSelect').empty();
 
-        $('#mergeAlertCaseSelect').append('<optgroup label="Opened" id="switchMergeAlertCasesOpen"></optgroup>');
+        $('#mergeAlertCaseSelect').append('<optgroup label="Open" id="switchMergeAlertCasesOpen"></optgroup>');
         $('#mergeAlertCaseSelect').append('<optgroup label="Closed" id="switchMergeAlertCasesClose"></optgroup>');
-        ocs = data.data;
-        ret_data = [];
+        let ocs = data.data;
+        let ret_data = [];
         for (index in ocs) {
-            case_name = sanitizeHTML(ocs[index].name);
-            cs_name = sanitizeHTML(ocs[index].customer_name);
+            let case_name = sanitizeHTML(ocs[index].name);
+            let cs_name = sanitizeHTML(ocs[index].customer_name);
             ret_data.push({
                         'value': ocs[index].case_id,
                         'text': `${case_name} (${cs_name}) ${ocs[index].access}`
@@ -418,10 +449,10 @@ function mergeAlertCasesSelectOption(data) {
 }
 
 function fetchSmartRelations(alert_id) {
-    $('input[value="open_alerts"]').prop('checked', true);
-    $('input[value="closed_alerts"]').prop('checked', false);
-    $('input[value="open_cases"]').prop('checked', false);
-    $('input[value="closed_cases"]').prop('checked', false);
+    $(`input[name="open_alerts_${alert_id}"]`).prop('checked', true);
+    $(`input[name="closed_alerts_${alert_id}"]`).prop('checked', false);
+    $(`input[name="open_cases_${alert_id}"]`).prop('checked', false);
+    $(`input[name="closed_cases_${alert_id}"]`).prop('checked', false);
 
     fetchSimilarAlerts(alert_id, false, true, false,
         false, false);
@@ -429,7 +460,7 @@ function fetchSmartRelations(alert_id) {
 
 function buildAlertLink(alert_id){
     const current_path = location.protocol + '//' + location.host
-    return current_path + '/alerts' + case_param() + '&alert_id=' + alert_id;
+    return current_path + '/alerts' + case_param() + '&alert_ids=' + alert_id;
 }
 
 function copyAlertLink(alert_id) {
@@ -463,7 +494,7 @@ function getAlertOffset(element) {
 function createNetwork(alert_id, relatedAlerts, nb_nodes, containerId, containerConfigureId) {
   const { nodes, edges } = relatedAlerts;
 
-  if (nodes.length === 0) {
+  if (nodes.length === 0 || nodes.length === undefined) {
       $(`#similarAlertsNotify-${alert_id}`).text(`No relationships found for this alert`);
      return;
   }
@@ -544,7 +575,7 @@ function createNetwork(alert_id, relatedAlerts, nb_nodes, containerId, container
           node_type = selectedNodeId.split('_')[0];
           node_id = selectedNodeId.split('_')[1];
 
-          if (node_type === 'alert' || node_type === 'case') {
+          if (node_type === 'alert' || node_type === 'case' || node_type === 'asset' || node_type === 'ioc') {
               // Get the offset of the container element.
               const containerOffset = getAlertOffset(container);
 
@@ -560,7 +591,11 @@ function createNetwork(alert_id, relatedAlerts, nb_nodes, containerId, container
 
               $('#view-alert').data('node-id', node_id);
               $('#view-alert').data('node-type', node_type);
-              $('#view-alert-text').text(`View ${node_type} #${node_id}`);
+              if (node_type === 'alert' || node_type === 'case') {
+                  $('#view-alert-text').text(`View on ${node_type} #${node_id}`);
+              } else {
+                    $('#view-alert-text').text(`Pivot on ${node_type} ${node_id}`);
+              }
               contextMenu.show();
           }
       }
@@ -587,6 +622,10 @@ function viewAlertGraph() {
         window.open(`/alerts?alert_ids=${node_id}&cid=${get_caseid()}`);
     } else if (node_type === 'case') {
         window.open(`/case?cid=${node_id}`);
+    } else if (node_type === 'asset') {
+        window.open(`/alerts?alert_assets=${node_id}&cid=${get_caseid()}`);
+    } else if (node_type === 'ioc') {
+        window.open(`/alerts?alert_iocs=${node_id}&cid=${get_caseid()}`);
     }
 }
 
@@ -737,14 +776,92 @@ function generateDefinitionList(obj) {
   return html;
 }
 
+function addTagFilter(this_object) {
+    let tag_name = $(this_object).data('tag');
+    let filters = getFiltersFromUrl();
+
+    if (filters['alert_tags']) {
+        for (let tag of filters['alert_tags'].split(',')) {
+            if (tag === tag_name) {
+                return;
+            }
+        }
+        filters['alert_tags'] += `,${tag_name}`;
+    } else {
+        filters['alert_tags'] = tag_name;
+    }
+
+    const queryParams = new URLSearchParams(window.location.search);
+    let page_number = parseInt(queryParams.get('page'));
+    let per_page = parseInt(queryParams.get('per_page'));
+
+    updateAlerts(page_number, per_page, filters)
+        .then(() => {
+            notify_success('Refreshed');
+            $('#newAlertsBadge').text(0).hide();
+        });
+}
+
 function getFiltersFromUrl() {
     const formData = new FormData($('#alertFilterForm')[0]);
     return Object.fromEntries(formData.entries());
 }
 
-function renderAlert(alert, expanded=false) {
+function alertResolutionToARC(resolution) {
+    if (resolution === null) {
+        return '';
+    }
+    switch (resolution.resolution_status_name) {
+        case 'True Positive With Impact':
+            return `<span class="badge alert-bade-status badge-pill badge-danger mr-2">True Positive with impact</span>`
+        case 'True Positive Without Impact':
+            return `<span class="badge alert-bade-status badge-pill badge-warning mr-2">True Positive without impact</span>`
+        case 'False Positive':
+            return `<span class="badge alert-bade-status badge-pill badge-success mr-2">False Positive</span>`
+        case 'Unknown':
+            return `<span class="badge alert-bade-status badge-pill badge-light mr-2">Unknown resolution</span>`
+    }
+}
+
+function renderNestedObject(obj) {
+    let output = '';
+    Object.entries(obj).forEach(([key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+            output += `<dt class="col-sm-3">${filterXSS(key)}:</dt><dd class="col-sm-9"><br /><dl class="row">${renderNestedObject(value)}</dl></dd>`;
+        } else {
+            output += `<dt class="col-sm-3">${filterXSS(key)}:</dt><dd class="col-sm-9">${filterXSS(value)}</dd>`;
+        }
+    });
+    return output;
+}
+
+function renderAlert(alert, expanded=false, modulesOptionsAlertReq,
+                     modulesOptionsIocReq) {
   const colorSeverity = alert_severity_to_color(alert.severity.severity_name);
   const alert_color = alertStatusToColor(alert.status.status_name);
+  const alert_resolution = alertResolutionToARC(alert.resolution_status);
+
+  if (alert.owner !== null) {
+      alert.owner.user_name = filterXSS(alert.owner.user_name);
+  }
+  alert.alert_title = alert.alert_title ? filterXSS(alert.alert_title) : 'No title provided';
+  alert.alert_description = alert.alert_description ? filterXSS(alert.alert_description) : 'No description provided';
+  alert.alert_source = alert.alert_description ? filterXSS(alert.alert_source) : 'No source provided';
+  alert.alert_source_link = filterXSS(alert.alert_source_link);
+  alert.alert_source_ref = filterXSS(alert.alert_source_ref);
+  alert.alert_note = filterXSS(alert.alert_note);
+
+  let menuOptionsHtmlAlert = '';
+  const menuOptions = modulesOptionsAlertReq;
+  if (menuOptions.length !== 0) {
+
+      menuOptionsHtmlAlert = '<div class="dropdown-divider"></div>';
+      for (let index in menuOptions) {
+        let opt = menuOptions[index];
+        menuOptionsHtmlAlert += `<a class="dropdown-item" href="javascript:void(0);" onclick='init_module_processing_alert(${alert.alert_id}, "${opt.hook_name}",`+
+                    `"${opt.manual_hook_ui_name}","${opt.module_name}");return false;'><i class="fa fa-arrow-alt-circle-right mr-2"></i> ${opt.manual_hook_ui_name}</a>`
+      }
+  }
 
   return `
 <div class="card alert-card full-height alert-card-selectable ${alert_color}" id="alertCard-${alert.alert_id}">
@@ -759,100 +876,114 @@ function renderAlert(alert, expanded=false) {
           <!-- Alert details -->
           <div class="d-flex flex-column">
             <div class="flex-1 ml-md-4 mr-4 pt-1">
-              <div class="row mb-3">
-                  <div class="avatar-group ${alert.owner ? '' : 'ml-2 mr-2'}">
-                    <div class="avatar-tickbox-wrapper">
-                      <div class="avatar-wrapper">
-                        <div class="avatar cursor-pointer">
-                          <span class="avatar-title alert-m-title alert-similarity-trigger rounded-circle bg-${colorSeverity}" data-toggle="collapse" data-target="#additionalDetails-${alert.alert_id}">
-                            <i class="fa-solid fa-fire"></i>
-                          </span>
-                        </div>
-                        ${alert.owner ? get_avatar_initials(alert.owner.user_name, true, `changeAlertOwner(${alert.alert_id})`) : `<div title="Assign to me" class="avatar avatar-sm" onclick="updateAlert(${alert.alert_id}, {alert_owner_id: userWhoami.user_id}, true);"><span class="avatar-title avatar-iris rounded-circle btn-alert-primary" style="cursor:pointer;"><i class="fa-solid fa-hand"></i></span></div>`}
-                      </div>
-                      <div class="tickbox" style="display:none;">
-                        <input type="checkbox" class="alert-selection-checkbox" data-alert-id="${alert.alert_id}" />
-                      </div>
-                    </div>
-                  </div>
-                  <h6 class="text-uppercase fw-bold mb-1 mt-1 ml-3 alert-m-title alert-m-title-${colorSeverity}" data-toggle="collapse" data-target="#additionalDetails-${alert.alert_id}">
-                    ${alert.alert_title}
-                    <span class="text-${colorSeverity} pl-3"></span>
-                    <div class="d-flex mb-3">
-                       
-                        <span title="Alert IDs" class=""><small class="text-muted"><i>#${alert.alert_id} - ${alert.alert_uuid}</i></small></span>
-                    </div>
-                  </h6>
-                <div class="col">
-                    <div class="d-flex">
-                        <div class="ml-auto alert-actions">
-                          <button type="button" class="btn btn-alert-primary btn-sm ml-2" onclick="mergeAlertModal(${alert.alert_id}, false);">Merge</button>
-                          
-                          <div class="dropdown ml-2 d-inline-block">
-                              <button type="button" class="btn btn-alert-primary btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                  Assign
-                              </button>
-                              <div class="dropdown-menu">
-                                  <a class="dropdown-item" href="javascript:void(0)" onclick="updateAlert(${alert.alert_id}, {alert_owner_id: userWhoami.user_id}, true);">Assign to me</a>
-                                  <a class="dropdown-item" href="javascript:void(0)" onclick="changeAlertOwner(${alert.alert_id});">Assign</a>
-                              </div>
-                          </div>
-                          <div class="dropdown ml-2 d-inline-block">
-                              <button type="button" class="btn btn-alert-primary btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                  Set status
-                              </button>
-                              <div class="dropdown-menu">
-                                  <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'New');">New</a>
-                                  <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'In progress');">In progress</a>
-                                  <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'Pending');">Pending</a>
-                                  <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'Closed');">Closed</a>
-                                  <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'Merged');">Merged</a>
+                <div class="row mb-4">
+                    <div class="flex-column">
+                        <div class="avatar-group ${alert.owner ? '' : 'ml-2 mr-2'}">
+                            <div class="avatar-tickbox-wrapper">
+                              <div class="avatar-wrapper">
+                                <div class="avatar cursor-pointer">
+                                  <span class="avatar-title alert-m-title alert-similarity-trigger rounded-circle bg-${colorSeverity}" data-toggle="collapse" data-target="#additionalDetails-${alert.alert_id}">
+                                    <i class="fa-solid fa-fire"></i>
+                                  </span>
                                 </div>
-                          </div>
-                                                    ${alert.status.status_name === 'Closed' ? `
-                              <button type="button" class="btn btn-alert-success btn-sm ml-2" onclick="changeStatusAlert(${alert.alert_id}, 'In progress');">Set in progress</button>
-                          `: ` 
-                          <button type="button" class="btn btn-alert-danger btn-sm ml-2" onclick="editAlert(${alert.alert_id}, true);">Close with note</button>
-                          <button type="button" class="btn btn-alert-danger btn-sm ml-2" onclick="changeStatusAlert(${alert.alert_id}, 'Closed');">Close</button>
-                          `}
-                      </div>
-                  </div>
-                  </div>
-                      <div class=" d-flex mt-3">
-                        <div class="ml-auto">
-                            <button type="button" class="btn bg-transparent btn-sm mt--4" onclick="comment_element(${alert.alert_id}, 'alerts', true)" title="Comments">
-                              <span class="btn-label">
-                                <i class="fa-solid fa-comments"></i><span class="notification" id="object_comments_number_${alert.alert_id}">${alert.comments.length || ''}</span>
-                              </span>
-                            </button>
-                            <button class="btn btn-sm bg-transparent mt--4" type="button" onclick="editAlert(${alert.alert_id})"><i class="fa fa-pencil"></i></button>
-                            <button class="btn bg-transparent mt--4" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                              <span aria-hidden="true"><i class="fas fa-ellipsis-v"></i></span>
-                            </button>
-                            <div class="dropdown-menu" role="menu">
-                              <a href="javascript:void(0)" class="dropdown-item" onclick="copyAlertLink(${alert.alert_id});return false;"><small class="fa fa-share mr-2"></small>Share</a>
-                              <a href="javascript:void(0)" class="dropdown-item" onclick="copyMDAlertLink(${alert.alert_id});return false;"><small class="fa-brands fa-markdown mr-2"></small>Markdown Link</a>
-                              <div class="dropdown-divider"></div>
-                              <a href="javascript:void(0)" class="dropdown-item text-danger" onclick="delete_alert(${alert.alert_id});"><small class="fa fa-trash mr-2"></small>Delete alert</a>
+                                ${alert.owner ? get_avatar_initials(alert.owner.user_name, true, `changeAlertOwner(${alert.alert_id})`) : `<div title="Assign to me" class="avatar avatar-sm" onclick="updateAlert(${alert.alert_id}, {alert_owner_id: userWhoami.user_id}, true);"><span class="avatar-title avatar-iris rounded-circle btn-alert-primary" style="cursor:pointer;"><i class="fa-solid fa-hand"></i></span></div>`}
+                              </div>
+                              <div class="tickbox" style="display:none;">
+                                <input type="checkbox" class="alert-selection-checkbox" data-alert-id="${alert.alert_id}" />
+                              </div>
                             </div>
                         </div>
                     </div>
-                  </div>
-              </div>
+                    <div class="col-9">
+                        <h6 class="text-uppercase fw-bold mb-1 mt-1 ml-3 alert-m-title alert-m-title-${colorSeverity}" data-toggle="collapse" data-target="#additionalDetails-${alert.alert_id}">
+                            ${alert.alert_title}
+                            <span class="text-${colorSeverity} pl-3"></span>
+                            <div class="d-flex mb-3">
+                               
+                                <span title="Alert IDs" class=""><small class="text-muted"><i>#${alert.alert_id} - ${alert.alert_uuid}</i></small></span>
+                            </div>
+                        </h6>
+                    </div>
+                    
+                    <div class="col-xs-12 col">
+                                        
+                        <div class=" d-flex mt-3">
+                            <div class="ml-auto">
+                                <button type="button" class="btn bg-transparent btn-sm mt--4" onclick="comment_element(${alert.alert_id}, 'alerts', true)" title="Comments">
+                                  <span class="btn-label">
+                                    <i class="fa-solid fa-comments"></i><span class="notification" id="object_comments_number_${alert.alert_id}">${alert.comments.length || ''}</span>
+                                  </span>
+                                </button>
+                                <button class="btn btn-sm bg-transparent mt--4" type="button" onclick="editAlert(${alert.alert_id})"><i class="fa fa-pencil"></i></button>
+                                <button class="btn bg-transparent mt--4" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                  <span aria-hidden="true"><i class="fas fa-ellipsis-v"></i></span>
+                                </button>
+                                <div class="dropdown-menu" role="menu">
+                                  <a href="javascript:void(0)" class="dropdown-item" onclick="copyAlertLink(${alert.alert_id});return false;"><small class="fa fa-share mr-2"></small>Share</a>
+                                  <a href="javascript:void(0)" class="dropdown-item" onclick="copyMDAlertLink(${alert.alert_id});return false;"><small class="fa-brands fa-markdown mr-2"></small>Markdown Link</a>
+                                  ${menuOptionsHtmlAlert}
+                                  <div class="dropdown-divider"></div>
+                                  <a href="javascript:void(0)" class="dropdown-item" onclick="showAlertHistory(${alert.alert_id});return false;"><small class="fa fa-clock-rotate-left mr-2"></small>History</a>
+                                  <div class="dropdown-divider"></div>
+                                  <a href="javascript:void(0)" class="dropdown-item text-danger" onclick="delete_alert(${alert.alert_id});"><small class="fa fa-trash mr-2"></small>Delete alert</a>
+                                </div>
+                            </div>
+                        </div>          
+                                        
+                    </div>
 
-              <span class="mt-4">${alert.alert_description}</span><br />
+                </div>
+                
+                <div class="float-right alert-actions mt--4">
+                      <button type="button" class="btn btn-alert-primary btn-sm ml-2" onclick="mergeAlertModal(${alert.alert_id}, false);">Merge</button>
+                      
+                      <div class="dropdown ml-2 d-inline-block">
+                          <button type="button" class="btn btn-alert-primary btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                              Assign
+                          </button>
+                          <div class="dropdown-menu">
+                              <a class="dropdown-item" href="javascript:void(0)" onclick="updateAlert(${alert.alert_id}, {alert_owner_id: userWhoami.user_id}, true);">Assign to me</a>
+                              <a class="dropdown-item" href="javascript:void(0)" onclick="changeAlertOwner(${alert.alert_id});">Assign</a>
+                          </div>
+                      </div>
+                      <div class="dropdown ml-2 d-inline-block">
+                          <button type="button" class="btn btn-alert-primary btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                              Set status
+                          </button>
+                          <div class="dropdown-menu">
+                              <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'New');">New</a>
+                              <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'In progress');">In progress</a>
+                              <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'Pending');">Pending</a>
+                              <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'Closed');">Closed</a>
+                              <a class="dropdown-item" href="javascript:void(0)" onclick="changeStatusAlert(${alert.alert_id}, 'Merged');">Merged</a>
+                            </div>
+                      </div>
+                      ${alert.status.status_name === 'Closed' ? `
+                          <button type="button" class="btn btn-alert-success btn-sm ml-2" onclick="changeStatusAlert(${alert.alert_id}, 'In progress');">Set in progress</button>
+                      `: ` 
+                      <button type="button" class="btn btn-alert-danger btn-sm ml-2" onclick="editAlert(${alert.alert_id}, true);">Close with note</button>
+                      <button type="button" class="btn btn-alert-danger btn-sm ml-2" onclick="changeStatusAlert(${alert.alert_id}, 'Closed');">Close</button>
+                      `}
+                </div>
+                <span class="mt-4">${alert.alert_description.replaceAll('\n', '<br/>').replaceAll('\t', '  ')}</span>
+
+                
+
               <!-- Additional details and other content -->
               <div id="additionalDetails-${alert.alert_id}" class="collapse mt-4 ${expanded? 'show': ''} alert-collapsible">
                 <div class="card-no-pd mt-2">
                     <div class="card-body">
                     <h3 class="title mb-3"><strong>General info</strong></h3>  
-                      <div class="row">
-                        ${alert.alert_source ? `<div class="col-md-3"><b>Source:</b></div>
+                        ${alert.alert_source ? `<div class="row"><div class="col-md-3"><b>Source:</b></div>
                         <div class="col-md-9">${alert.alert_source}</div>
                       </div>` : ''}
                       ${alert.alert_source_link ? `<div class="row mt-2">
                         <div class="col-md-3"><b>Source Link:</b></div>
-                        <div class="col-md-9"><a href="${alert.alert_source_link}">${alert.alert_source_link}</a></div>
+                        <div class="col-md-9">${
+                            alert.alert_source_link && alert.alert_source_link.startsWith('http') 
+                            ? `<a href="${alert.alert_source_link}">${alert.alert_source_link}</a>` 
+                            : 'No valid link provided'
+                          }</div>
                       </div>` : ''}
                       ${alert.alert_source_ref ? `<div class="row mt-2">
                         <div class="col-md-3"><b>Source Reference:</b></div>
@@ -860,11 +991,11 @@ function renderAlert(alert, expanded=false) {
                       </div>` : ''}
                       ${alert.alert_source_event_time ? `<div class="row mt-2">
                         <div class="col-md-3"><b>Source Event Time:</b></div>
-                        <div class="col-md-9">${alert.alert_source_event_time}</div>
+                        <div class="col-md-9">${formatTime(alert.alert_source_event_time)} UTC</div>
                       </div>` : ''}
                       ${alert.alert_creation_time ? `<div class="row mt-2">
                         <div class="col-md-3"><b>IRIS Creation Time:</b></div>
-                        <div class="col-md-9">${alert.alert_creation_time}</div>
+                        <div class="col-md-9">${formatTime(alert.alert_creation_time)} UTC</div>
                       </div>` : ''}
                     
                     <div class="separator-solid"></div>
@@ -873,18 +1004,12 @@ function renderAlert(alert, expanded=false) {
                     
                     <!-- Alert Context section -->
                     ${
-                          alert.alert_context && Object.keys(alert.alert_context).length > 0
-                              ? `<div class="separator-solid"></div><h3 class="title mt-3 mb-3"><strong>Context</strong></h3>
-                                           <dl class="row">
-                                             ${Object.entries(alert.alert_context)
-                                  .map(
-                                      ([key, value]) =>
-                                          `<dt class="col-sm-3">${key}</dt>
-                                                    <dd class="col-sm-9">${value}</dd>`
-                                  )
-                                  .join('')}
-                                           </dl>`
-                              : ''
+                        alert.alert_context && Object.keys(alert.alert_context).length > 0
+                            ? `<div class="separator-solid"></div><h3 class="title mt-3 mb-3"><strong>Context</strong></h3>
+                                <dl class="row">
+                                ${renderNestedObject(alert.alert_context)}
+                                </dl>`
+                            : ''
                       }
                     
                     <div class="separator-solid"></div>
@@ -897,19 +1022,19 @@ function renderAlert(alert, expanded=false) {
                         <div class="row ml-1">
                             <div class="selectgroup selectgroup-pills mt-4">
                                 <label class="selectgroup-item">
-                                    <input type="checkbox" name="value" value="open_alerts" class="selectgroup-input filter-graph-alert-checkbox" onclick="refreshAlertRelationships(${alert.alert_id});">
+                                    <input type="checkbox" name="open_alerts_${alert.alert_id}" class="selectgroup-input filter-graph-alert-checkbox" onclick="refreshAlertRelationships(${alert.alert_id});">
                                     <span class="selectgroup-button">Show open alerts</span>
                                 </label>
                                 <label class="selectgroup-item">
-                                    <input type="checkbox" name="value" value="closed_alerts" class="selectgroup-input filter-graph-alert-checkbox" onclick="refreshAlertRelationships(${alert.alert_id})">
+                                    <input type="checkbox" name="closed_alerts_${alert.alert_id}" class="selectgroup-input filter-graph-alert-checkbox" onclick="refreshAlertRelationships(${alert.alert_id})">
                                     <span class="selectgroup-button">Show closed alerts</span>
                                 </label>
                                 <label class="selectgroup-item">
-                                    <input type="checkbox" name="value" value="open_cases" class="selectgroup-input filter-graph-alert-checkbox" onclick="refreshAlertRelationships(${alert.alert_id})">
+                                    <input type="checkbox" name="open_cases_${alert.alert_id}" class="selectgroup-input filter-graph-alert-checkbox" onclick="refreshAlertRelationships(${alert.alert_id})">
                                     <span class="selectgroup-button">Show open cases</span>
                                 </label>
                                 <label class="selectgroup-item">
-                                    <input type="checkbox" name="value" value="closed_cases" class="selectgroup-input filter-graph-alert-checkbox" onclick="refreshAlertRelationships(${alert.alert_id})">
+                                    <input type="checkbox" name="closed_cases_${alert.alert_id}" class="selectgroup-input filter-graph-alert-checkbox" onclick="refreshAlertRelationships(${alert.alert_id})">
                                     <span class="selectgroup-button">Show closed cases</span>
                                 </label>
                             </div>
@@ -926,7 +1051,7 @@ function renderAlert(alert, expanded=false) {
                                     <div class="input-group-prepend">
                                         <span class="input-group-text">Lookback (days)</span>
                                     </div>
-                                    <input type="number" name="value" value="7" class="form-control" id="daysBackGraphFilter-${alert.alert_id}" onchange="refreshAlertRelationships(${alert.alert_id})">
+                                    <input type="number" name="value" value="30" class="form-control" id="daysBackGraphFilter-${alert.alert_id}" onchange="refreshAlertRelationships(${alert.alert_id})">
                                 </div>
                             </div>  
                         </div>
@@ -952,6 +1077,7 @@ function renderAlert(alert, expanded=false) {
                                                <th>TLP</th>
                                                <th>Tags</th>
                                                <th>Enrichment</th>
+                                               <th></th>
                                              </tr>
                                            </thead>
                                            <tbody>
@@ -959,14 +1085,26 @@ function renderAlert(alert, expanded=false) {
                               .map(
                                   (ioc) => `
                                                  <tr>
-                                                   <td>${ioc.ioc_value}</td>
-                                                   <td>${ioc.ioc_description}</td>
-                                                   <td>${ioc.ioc_type ? ioc.ioc_type.type_name : '-'}</td>
-                                                   <td>${ioc.ioc_tlp ? ioc.ioc_tlp : '-'}</td>
-                                                   <td>${ioc.ioc_tags ? ioc.ioc_tags.split(',').map((tag) => `<span class="badge badge-pill badge-light ml-1"><i class="fa fa-tag mr-1"></i>${tag}</span>`).join('') : ''}</td>
+                                                   <td>${filterXSS(ioc.ioc_value)}</td>
+                                                   <td>${filterXSS(ioc.ioc_description)}</td>
+                                                   <td>${ioc.ioc_type ? filterXSS(ioc.ioc_type.type_name) : '-'}</td>
+                                                   <td>${filterXSS(ioc.ioc_tlp) ? ioc.ioc_tlp : '-'}</td>
+                                                   <td>${ioc.ioc_tags ? ioc.ioc_tags.split(',').map((tag) => `<span class="badge badge-pill badge-light ml-1"><i class="fa fa-tag mr-1"></i>${filterXSS(tag)}</span>`).join('') : ''}</td>
                                                    <td>${ioc.ioc_enrichment ? `<button type="button" class="btn btn-sm btn-outline-dark" data-toggle="modal" data-target="#enrichmentModal" onclick="showEnrichment(${JSON.stringify(ioc.ioc_enrichment).replace(/"/g, '&quot;')})">
                                                       View Enrichment
                                                     </button>` : ''}
+                                                    </td>
+                                                    <td>
+                                                       <button class="btn bg-transparent" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                                          <span aria-hidden="true"><i class="fas fa-ellipsis-v"></i></span>
+                                                        </button>
+                                                        <div class="dropdown-menu" role="menu">
+                                                        ${ modulesOptionsIocReq.length === 0 ? `<a class="dropdown-item" href="javascript:void(0);"><i class="fas fa-rocket mr-2"></i> No module available</a>` :
+                                                          modulesOptionsIocReq.map((opt) => `
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick='init_module_processing([${ioc.ioc_id}], "${opt.hook_name}","${opt.manual_hook_ui_name}","${opt.module_name}", "ioc");return false;'><i class="fas fa-rocket mr-2"></i> ${opt.manual_hook_ui_name}</a>`
+                                                            ).join('')
+                                                        }
+                                                        </div>
                                                     </td>
                                                  </tr>`
                               )
@@ -999,12 +1137,12 @@ function renderAlert(alert, expanded=false) {
                   .map(
                       (asset) => `
                                      <tr>
-                                       <td>${asset.asset_name ? asset.asset_name : '-'}</td>
-                                       <td>${asset.asset_description ? asset.asset_description : '-'}</td>
-                                       <td>${asset.asset_type ? asset.asset_type.asset_name : '-'}</td>
-                                       <td>${asset.asset_domain ? asset.asset_domain : '-'}</td>
-                                       <td>${asset.asset_ip ? asset.asset_ip : '-'}</td>
-                                       <td>${asset.asset_tags ? asset.asset_tags.split(',').map((tag) => `<span class="badge badge-pill badge-light ml-1"><i class="fa fa-tag mr-1"></i>${tag}</span>`).join('') : ''}</td>
+                                       <td>${asset.asset_name ? filterXSS(asset.asset_name) : '-'}</td>
+                                       <td>${asset.asset_description ? filterXSS(asset.asset_description) : '-'}</td>
+                                       <td>${asset.asset_type ? filterXSS(asset.asset_type.asset_name) : '-'}</td>
+                                       <td>${asset.asset_domain ? filterXSS(asset.asset_domain) : '-'}</td>
+                                       <td>${asset.asset_ip ? filterXSS(asset.asset_ip) : '-'}</td>
+                                       <td>${asset.asset_tags ? asset.asset_tags.split(',').map((tag) => `<span class="badge badge-pill badge-light ml-1"><i class="fa fa-tag mr-1"></i>${filterXSS(tag)}</span>`).join('') : ''}</td>
                                        <td>${asset.asset_enrichment ? `<button type="button" class="btn btn-sm btn-outline-dark" data-toggle="modal" data-target="#enrichmentModal" onclick="showEnrichment(${JSON.stringify(asset.asset_enrichment).replace(/"/g, '&quot;')})">
                                           View Enrichment
                                         </button>` : ''}
@@ -1024,7 +1162,7 @@ function renderAlert(alert, expanded=false) {
                            <button class="btn btn-sm btn-outline-dark" type="button" data-toggle="collapse" data-target="#rawAlert-${alert.alert_id}" 
                            aria-expanded="false" aria-controls="rawAlert-${alert.alert_id}">Toggle Raw Alert</button>
                            <div class="collapse mt-3" id="rawAlert-${alert.alert_id}">
-                             <pre class="pre-scrollable">${JSON.stringify(alert.alert_source_content, null, 2)}</pre>
+                             <pre class="pre-scrollable">${filterXSS(JSON.stringify(alert.alert_source_content, null, 2))}</pre>
                            </div>`
               : ""
       }
@@ -1045,18 +1183,19 @@ function renderAlert(alert, expanded=false) {
                 </div>
               `).join('') + '</div>' : '<div class="mb-4"></div>'}
             
-              <div class="">
+              <div class="">  
+                ${alert_resolution === undefined ? "": alert_resolution} 
                 ${alert.status ? `<span class="badge alert-bade-status badge-pill badge-light mr-3">${alert.status.status_name}</span>` : ''}                    
-                <span title="Alert source event time"><b><i class="fa-regular fa-calendar-check"></i></b>
-                <small class="text-muted ml-1">${alert.alert_source_event_time}</small></span>
+                <span title="Alert source event UTC time"><b><i class="fa-regular fa-calendar-check"></i></b>
+                <small class="text-muted ml-1">${formatTime(alert.alert_source_event_time)}</small></span>
                 <span title="Alert severity"><b class="ml-3"><i class="fa-solid fa-bolt"></i></b>
                   <small class="text-muted ml-1" id="alertSeverity-${alert.alert_id}" data-severity-id="${alert.severity.severity_id}">${alert.severity.severity_name}</small></span>
                 <span title="Alert source"><b class="ml-3"><i class="fa-solid fa-cloud-arrow-down"></i></b>
-                  <small class="text-muted ml-1">${alert.alert_source || 'Unspecified'}</small></span>
+                  <small class="text-muted ml-1">${filterXSS(alert.alert_source) || 'Unspecified'}</small></span>
                 <span title="Alert client"><b class="ml-3"><i class="fa-regular fa-circle-user"></i></b>
-                  <small class="text-muted ml-1 mr-2">${alert.customer.customer_name || 'Unspecified'}</small></span>
-                ${alert.classification && alert.classification.name_expanded ? `<span class="badge badge-pill badge-light" title="Classification" id="alertClassification-${alert.alert_id}" data-classification-id="${alert.classification.id}"><i class="fa-solid fa-shield-virus mr-1"></i>${alert.classification.name_expanded}</span>`: ''}
-                ${alert.alert_tags ? alert.alert_tags.split(',').map((tag) => `<span class="badge badge-pill badge-light ml-1"><i class="fa fa-tag mr-1"></i>${tag}</span>`).join('') + `<div style="display:none;" id="alertTags-${alert.alert_id}">${alert.alert_tags}</div>` : ''}
+                  <small class="text-muted ml-1 mr-2">${filterXSS(alert.customer.customer_name) || 'Unspecified'}</small></span>
+                ${alert.classification && alert.classification.name_expanded ? `<span class="badge badge-pill badge-light" title="Classification" id="alertClassification-${alert.alert_id}" data-classification-id="${alert.classification.id}"><i class="fa-solid fa-shield-virus mr-1"></i>${filterXSS(alert.classification.name_expanded)}</span>`: ''}
+                ${alert.alert_tags ? alert.alert_tags.split(',').map((tag) => `<span class="badge badge-pill badge-light ml-1" title="Add as filter" style="cursor: pointer;" data-tag="${filterXSS(tag)}" onclick="addTagFilter(this);"><i class="fa fa-tag mr-1"></i>${filterXSS(tag)}</span>`).join('') + `<div style="display:none;" id="alertTags-${alert.alert_id}">${filterXSS(alert.alert_tags)}</div>` : ''}
                 
               </div>
 
@@ -1074,6 +1213,43 @@ function renderAlert(alert, expanded=false) {
 
 }
 
+function init_module_processing_alert(alert_id, hook_name, hook_ui_name, module_name, data_type) {
+    let data = Object();
+    data['hook_name'] = hook_name;
+    data['module_name'] = module_name;
+    data['hook_ui_name'] = hook_ui_name;
+    data['csrf_token'] = $('#csrf_token').val();
+    data['type'] = 'alert';
+    data['targets'] = [alert_id];
+
+    post_request_api("/dim/hooks/call", JSON.stringify(data), true)
+    .done(function (data){
+        notify_auto_api(data)
+    });
+}
+
+let modulesOptionsAlertReq = null;
+let modulesOptionsIocReq = null;
+
+async function showAlertHistory(alertId) {
+    const alertDataReq = await fetchAlert(alertId);
+    if (!notify_auto_api(alertDataReq, true)) {
+        return;
+    }
+    let alertData = alertDataReq.data;
+    let entryDiv = $('#modal_alert_history_content');
+
+    for (let entry in alertData.modification_history)  {
+        let date = new Date(Math.floor(entry) * 1000);
+        let dateStr = date.toLocaleString();
+        let entryStr = alertData.modification_history[entry];
+        entryDiv.append('<div class="row"><div class="col-3">' + dateStr + '</div><div class="col-3">' + entryStr.user + '</div><div class="col-6">'+ entryStr.action +'</div></div>');
+
+    }
+
+    $('#modal_alert_history').modal('show');
+}
+
 async function refreshAlert(alertId, alertData, expanded=false) {
     if (alertData === undefined) {
         const alertDataReq = await fetchAlert(alertId);
@@ -1083,10 +1259,42 @@ async function refreshAlert(alertId, alertData, expanded=false) {
         alertData = alertDataReq.data;
     }
 
+      if (modulesOptionsAlertReq === null) {
+    modulesOptionsAlertReq = await fetchModulesOptionsAlert();
+    if (!notify_auto_api(modulesOptionsAlertReq, true)) {
+        return;
+    }
+  }
+  if (modulesOptionsIocReq === null) {
+    modulesOptionsIocReq = await fetchModulesOptionsIoc();
+    if (!notify_auto_api(modulesOptionsIocReq, true)) {
+        return;
+    }
+  }
+
     const alertElement = $(`#alertCard-${alertId}`);
-    const alertHtml = renderAlert(alertData, expanded);
+    const alertHtml = renderAlert(alertData, expanded, modulesOptionsAlertReq.data, modulesOptionsIocReq.data);
     alertElement.replaceWith(alertHtml);
 }
+
+async function fetchModulesOptionsAlert() {
+    const response = get_request_api('/dim/hooks/options/alert/list');
+
+    return await response;
+}
+
+async function fetchModulesOptionsIoc() {
+    const response = get_request_api('/dim/hooks/options/ioc/list');
+
+    return await response;
+}
+
+async function fetchModulesOptionsAsset() {
+    const response = get_request_api('/dim/hooks/options/asset/list');
+
+    return await response;
+}
+
 
 async function updateAlerts(page, per_page, filters = {}, paging=false){
   if (sortOrder === undefined) { sortOrder = 'desc'; }
@@ -1105,6 +1313,19 @@ async function updateAlerts(page, per_page, filters = {}, paging=false){
     return;
   }
   const alerts = data.data.alerts;
+
+  if (modulesOptionsAlertReq === null) {
+    modulesOptionsAlertReq = await fetchModulesOptionsAlert();
+    if (!notify_auto_api(modulesOptionsAlertReq, true)) {
+        return;
+    }
+  }
+  if (modulesOptionsIocReq === null) {
+    modulesOptionsIocReq = await fetchModulesOptionsIoc();
+    if (!notify_auto_api(modulesOptionsIocReq, true)) {
+        return;
+    }
+  }
 
   // Check if the selection mode is active
    const selectionModeActive = $('body').hasClass('selection-mode');
@@ -1128,7 +1349,8 @@ async function updateAlerts(page, per_page, filters = {}, paging=false){
       alerts.forEach((alert) => {
           const alertElement = $('<div></div>');
 
-          const alertHtml = renderAlert(alert, isExpanded);
+          const alertHtml = renderAlert(alert, isExpanded, modulesOptionsAlertReq.data,
+                                               modulesOptionsIocReq.data);
           alertElement.html(alertHtml);
           alertsContainer.append(alertElement);
       });
@@ -1296,7 +1518,6 @@ function resetSavedFilters(queryParams = null, replaceState = true) {
     if (replaceState) {
         window.history.replaceState(null, null, `?${queryParams.toString()}`);
     }
-    $('.preset-dropdown-container').hide();
     $('#savedFilters').selectpicker('val', '');
 
     return queryParams;
@@ -1330,10 +1551,7 @@ async function editAlert(alert_id, close=false) {
     const confirmAlertEdition = $('#confirmAlertEdition');
 
     alertTag.val($(`#alertTags-${alert_id}`).text())
-    alertTag.amsifySuggestags({
-     printValues: false,
-     suggestions: []
-    });
+    set_suggest_tags(`editAlertTags`);
     $('#editAlertNote').val($(`#alertNote-${alert_id}`).text());
 
     if (close) {
@@ -1346,19 +1564,19 @@ async function editAlert(alert_id, close=false) {
         confirmAlertEdition.text('Save')
     }
 
-    fetchSelectOptions('editAlertClassification', selectsConfig['alertClassificationFilter']).then(() => {
+    fetchSelectOptions('editAlertClassification', selectsConfig['alert_classification_id']).then(() => {
       $('#editAlertClassification').val($(`#alertClassification-${alert_id}`).data('classification-id'));
     }).catch(error => {
       console.error(error);
     });
 
-    fetchSelectOptions('editAlertSeverity', selectsConfig['alertSeverityFilter']).then(() => {
+    fetchSelectOptions('editAlertSeverity', selectsConfig['alert_severity_id']).then(() => {
       $('#editAlertSeverity').val($(`#alertSeverity-${alert_id}`).data('severity-id'));
     }).catch(error => {
       console.error(error);
     });
 
-    $('#editAlertModal').modal('show');
+   $('#editAlertModal').modal('show');
 
     confirmAlertEdition.off('click').on('click', function () {
         let alert_note = $('#editAlertNote').val();
@@ -1367,6 +1585,7 @@ async function editAlert(alert_id, close=false) {
         let data = {
           alert_note: alert_note,
           alert_tags: alert_tags,
+          alert_resolution_status_id: getAlertResolutionId($("input[type='radio'][name='resolutionStatus']:checked").val()),
           alert_classification_id: $('#editAlertClassification').val(),
           alert_severity_id: $('#editAlertSeverity').val()
         };
@@ -1382,6 +1601,40 @@ async function editAlert(alert_id, close=false) {
     });
 }
 
+function closeBatchAlerts() {
+    const alertTag = $('#editAlertTags');
+    const confirmAlertEdition = $('#confirmAlertEdition');
+    $('#editAlertNote').val('');
+    alertTag.val('');
+
+    confirmAlertEdition.text('Close alerts');
+    $('.alert-edition-part').hide();
+    $('#closeAlertModalLabel').text(`Close multiple alerts`);
+
+    $('#editAlertModal').modal('show');
+
+    confirmAlertEdition.off('click').on('click', function () {
+        let alert_note = $('#editAlertNote').val();
+        let alert_tags = alertTag.val();
+
+        let data = {
+          alert_note: alert_note,
+          alert_tags: alert_tags,
+          alert_resolution_status_id: getAlertResolutionId($("input[type='radio'][name='resolutionStatus']:checked").val()),
+        };
+
+        if (close) {
+            data['alert_status_id'] = getAlertStatusId('Closed');
+        }
+
+        updateBatchAlerts(data)
+            .then(() => {
+                $('#editAlertModal').modal('hide');
+            });
+    });
+
+}
+
 async function fetchSavedFilters() {
     const url = '/filters/alerts/list';
     return get_request_api(url)
@@ -1392,12 +1645,13 @@ async function fetchSavedFilters() {
                 savedFiltersDropdown.empty();
 
                 let dropdownHtml = `
-                    <select class="selectpicker" data-style="btn-sm" data-live-search="true" title="Select preset filter" id="savedFilters">
+                    <select class="selectpicker ml-2" data-style="btn-sm" data-live-search="true" title="Select preset filter" id="savedFilters">
                 `;
 
                 data.data.forEach(filter => {
+                    let filter_name = filterXSS(filter.filter_name);
                     dropdownHtml += `
-                                <option value="${filter.filter_id}" data-content='<div class="d-flex align-items-center"><span>${filter.filter_name} ${filter.filter_is_private ? '(private)' : ''}</span><div class="trash-wrapper hidden-trash"><i class="fas fa-trash delete-filter text-danger" id="dropfilter-id-${filter.filter_id}" title="Delete filter"></i></div></div>'>${filter.filter_name}</option>
+                                <option value="${filter.filter_id}" data-content='<div class="d-flex align-items-center"><span>${filter_name} ${filter.filter_is_private ? '(private)' : ''}</span><div class="trash-wrapper hidden-trash"><i class="fas fa-trash delete-filter text-danger" id="dropfilter-id-${filter.filter_id}" title="Delete filter"></i></div></div>'>${filter_name}</option>
                     `;
                 });
 
@@ -1510,7 +1764,7 @@ function changeStatusAlert(alert_id, status_name) {
 
 async function changeAlertOwner(alertId) {
   // Fetch the user list from the endpoint
-  const usersReq = await get_request_api('/manage/users/list');
+  const usersReq = await get_request_api('/manage/users/restricted/list');
 
   if (!notify_auto_api(usersReq, true)) { return; };
 
@@ -1552,7 +1806,7 @@ async function changeBatchAlertOwner(alertId) {
     }
 
       // Fetch the user list from the endpoint
-      const usersReq = await get_request_api('/manage/users/list');
+      const usersReq = await get_request_api('/manage/users/restricted/list');
 
       if (!notify_auto_api(usersReq, true)) { return; };
 
@@ -1662,7 +1916,7 @@ function fetchSelectOptions(selectElementId, configItem) {
           value: null,
           text: ''
         }));
-        if (selectElementId === 'alertOwnerFilter') {
+        if (selectElementId === 'alert_owner_id') {
             selectElement.append($('<option>', {
                 value: '-1',
                 text: 'Unassigned'
@@ -1779,12 +2033,10 @@ function updateAlertBadge() {
 
 function refreshAlertRelationships(alertId) {
     // Get the checked status of each checkbox
-    let fetch_open_alerts = $('input[value="open_alerts"]').prop('checked');
-    let fetch_closed_alerts = $('input[value="closed_alerts"]').prop('checked');
-    let fetch_open_cases = $('input[value="open_cases"]').prop('checked');
-    let fetch_closed_cases = $('input[value="closed_cases"]').prop('checked');
-
-    console.log("fetch_open_alerts: " + fetch_open_alerts)
+    let fetch_open_alerts = $(`input[name="open_alerts_${alertId}"]`).prop('checked');
+    let fetch_closed_alerts = $(`input[name="closed_alerts_${alertId}"]`).prop('checked');
+    let fetch_open_cases = $(`input[name="open_cases_${alertId}"]`).prop('checked');
+    let fetch_closed_cases = $(`input[name="closed_cases_${alertId}"]`).prop('checked');
 
     fetchSimilarAlerts(alertId, true, fetch_open_alerts, fetch_closed_alerts,
         fetch_open_cases, fetch_closed_cases);
@@ -1803,6 +2055,7 @@ $(document).ready(function () {
             setFormValuesFromUrl();
         });
     getAlertStatusList();
+    getAlertResolutionList();
 
     // Connect to socket.io alerts namespace
     const socket = io.connect('/alerts');
@@ -1834,10 +2087,6 @@ $(document).ready(function () {
     $('.tickbox input[type="checkbox"]').prop('checked', !allSelected);
     $(this).text(allSelected ? 'Select all' : 'Deselect all');
   });
-
-    $('#togglePresets').on('click', function() {
-        $('.preset-dropdown-container').toggle();
-    });
 
     socket.on('new_alert', function (data) {
         const badge = $('#newAlertsBadge');

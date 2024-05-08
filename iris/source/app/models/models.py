@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -53,8 +51,17 @@ metadata = Base.metadata
 class CaseStatus(enum.Enum):
     unknown = 0x0
     false_positive = 0x1
-    true_positive = 0x2
+    true_positive_with_impact = 0x2
     not_applicable = 0x3
+    true_positive_without_impact = 0x4
+
+
+class ReviewStatusList:
+    no_review_required = "No review required"
+    not_reviewed = "Not reviewed"
+    pending_review = "Pending review"
+    review_in_progress = "Review in progress"
+    reviewed = "Reviewed"
 
 
 class CompromiseStatus(enum.Enum):
@@ -180,6 +187,8 @@ class CaseAssets(db.Model):
     analysis_status_id = Column(ForeignKey('analysis_status.id'))
     custom_attributes = Column(JSON)
     asset_enrichment = Column(JSONB)
+    modification_history = Column(JSON)
+
 
     case = relationship('Cases')
     user = relationship('User')
@@ -209,6 +218,18 @@ class CaseClassification(db.Model):
     created_by = relationship('User')
 
 
+class EvidenceTypes(db.Model):
+    __tablename__ = 'evidence_type'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Text)
+    description = Column(Text)
+    creation_date = Column(DateTime, server_default=func.now(), nullable=True)
+    created_by_id = Column(ForeignKey('user.id'), nullable=True)
+
+    created_by = relationship('User')
+
+
 class CaseTemplate(db.Model):
     __tablename__ = 'case_template'
 
@@ -226,7 +247,7 @@ class CaseTemplate(db.Model):
     summary = Column(String, nullable=True)
     tags = Column(JSON, nullable=True)
     tasks = Column(JSON, nullable=True)
-    note_groups = Column(JSON, nullable=True)
+    note_directories = Column(JSON, nullable=True)
     classification = Column(String, nullable=True)
 
     created_by_user = relationship('User')
@@ -392,6 +413,7 @@ class Ioc(db.Model):
     ioc_tlp_id = Column(ForeignKey('tlp.tlp_id'))
     custom_attributes = Column(JSON)
     ioc_enrichment = Column(JSONB)
+    modification_history = Column(JSON)
 
     user = relationship('User')
     tlp = relationship('Tlp')
@@ -512,9 +534,24 @@ class Notes(db.Model):
     note_lastupdate = Column(DateTime)
     note_case_id = Column(ForeignKey('cases.case_id'))
     custom_attributes = Column(JSON)
+    directory_id = Column(ForeignKey('note_directory.id'), nullable=True)
+    modification_history = Column(JSON)
 
     user = relationship('User')
     case = relationship('Cases')
+    directory = relationship('NoteDirectory', backref='notes')
+
+
+class NoteDirectory(db.Model):
+    __tablename__ = 'note_directory'
+
+    id = Column(BigInteger, primary_key=True)
+    name = Column(Text, nullable=False)
+    parent_id = Column(ForeignKey('note_directory.id'), nullable=True)
+    case_id = Column(ForeignKey('cases.case_id'), nullable=False)
+
+    parent = relationship('NoteDirectory', remote_side=[id], backref='subdirectories')
+    case = relationship('Cases', backref='note_directories')
 
 
 class NotesGroup(db.Model):
@@ -562,15 +599,22 @@ class CaseReceivedFile(db.Model):
     file_uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, server_default=text("gen_random_uuid()"), nullable=False)
     filename = Column(Text)
     date_added = Column(DateTime)
-    file_hash = Column(String(65))
+    acquisition_date = Column(DateTime)
+    file_hash = Column(Text)
     file_description = Column(Text)
     file_size = Column(BigInteger)
+    start_date = Column(DateTime)
+    end_date = Column(DateTime)
     case_id = Column(ForeignKey('cases.case_id'))
     user_id = Column(ForeignKey('user.id'))
+    type_id = Column(ForeignKey('evidence_type.id'))
     custom_attributes = Column(JSON)
+    chain_of_custody = Column(JSON)
+    modification_history = Column(JSON)
 
     case = relationship('Cases')
     user = relationship('User')
+    type = relationship('EvidenceTypes')
 
 
 class TaskStatus(db.Model):
@@ -599,6 +643,7 @@ class CaseTasks(db.Model):
     task_status_id = Column(ForeignKey('task_status.id'))
     task_case_id = Column(ForeignKey('cases.case_id'))
     custom_attributes = Column(JSON)
+    modification_history = Column(JSON)
 
     case = relationship('Cases')
     user_open = relationship('User', foreign_keys=[task_userid_open])
@@ -613,13 +658,15 @@ class Tags(db.Model):
     id = Column(BigInteger, primary_key=True, nullable=False)
     tag_title = Column(Text, unique=True)
     tag_creation_date = Column(DateTime)
+    tag_namespace = Column(Text)
 
     cases = relationship('Cases', secondary="case_tags", back_populates='tags', viewonly=True)
 
-    def __init__(self, tag_title):
+    def __init__(self, tag_title, namespace=None):
         self.id = None
         self.tag_title = tag_title
         self.tag_creation_date = datetime.datetime.now()
+        self.tag_namespace = namespace
 
     def save(self):
         existing_tag = self.get_by_title(self.tag_title)
@@ -891,6 +938,13 @@ class SavedFilter(db.Model):
     user = relationship('User', foreign_keys=[created_by])
 
 
+class ReviewStatus(db.Model):
+    __tablename__ = 'review_status'
+
+    id = Column(Integer, primary_key=True)
+    status_name = Column(Text, nullable=False)
+
+
 class CeleryTaskMeta(db.Model):
     __bind_key__ = 'iris_tasks'
     __tablename__ = 'celery_taskmeta'
@@ -930,3 +984,5 @@ def create_safe_attr(session, attribute_display_name, attribute_description, att
         session.add(instance)
         session.commit()
         return True
+
+

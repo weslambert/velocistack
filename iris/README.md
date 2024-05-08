@@ -6,7 +6,7 @@
 <p align="center">
   Incident Response Investigation System
   <br>
-  <i>Current Version v2.1.0-beta-1</i>
+  <i>Current Version v2.4.7</i>
   <br>
   <a href="https://v200.beta.dfir-iris.org">Online Demonstration</a>
 </p>
@@ -52,17 +52,16 @@ git clone https://github.com/dfir-iris/iris-web.git
 cd iris-web
 
 # Checkout to the last tagged version 
-git checkout v2.1.0-beta-1
+git checkout v2.4.7
 
 # Copy the environment file 
 cp .env.model .env
-# [... optionally, do some configuration as specified in section below ...]
 
 # Build the dockers
-docker-compose build
+docker compose build
 
 # Run IRIS 
-docker-compose up
+docker compose up
 ```
 
 Iris shall be available on the host interface, port 443, protocol HTTPS - ``https://<your_instance_ip>``.  
@@ -112,4 +111,8 @@ Iris is still in its early stage. It can already be used in production, but plea
 
 ## License
 The contents of this repository is available under [LGPL3 license](LICENSE.txt).
+
+## Sponsoring
+Special thanks to Deutsche Telekom Security GmbH for sponsoring us!
+
 

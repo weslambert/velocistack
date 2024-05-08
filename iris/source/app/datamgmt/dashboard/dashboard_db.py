@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -22,7 +20,7 @@ from sqlalchemy import and_
 from sqlalchemy import desc
 
 from app import db
-from app.models import CaseTasks, TaskAssignee
+from app.models import CaseTasks, TaskAssignee, ReviewStatus
 from app.models import Cases
 from app.models import GlobalTasks
 from app.models import TaskStatus
@@ -69,7 +67,8 @@ def get_global_task(task_id):
     ).filter(
         GlobalTasks.id == task_id
     ).join(
-        GlobalTasks.user_assigned,
+        GlobalTasks.user_assigned
+    ).join(
         GlobalTasks.status
     ).order_by(
         desc(TaskStatus.status_name)
@@ -80,6 +79,23 @@ def get_global_task(task_id):
 
 def get_tasks_status():
     return TaskStatus.query.all()
+
+
+def list_user_reviews():
+    ct = Cases.query.with_entities(
+        Cases.case_id,
+        Cases.name,
+        ReviewStatus.status_name,
+        ReviewStatus.id.label('status_id')
+    ).join(
+        Cases.review_status
+    ).filter(
+        Cases.reviewer_id == current_user.id,
+        ReviewStatus.status_name != 'Reviewed',
+        ReviewStatus.status_name != 'Not reviewed'
+    ).all()
+
+    return ct
 
 
 def list_user_tasks():
@@ -152,3 +168,17 @@ def get_task_status(task_status_id):
     ).first()
 
     return ret
+
+
+def list_user_cases(show_all=False):
+    if show_all:
+        return Cases.query.filter(
+            Cases.owner_id == current_user.id
+        ).all()
+
+    return Cases.query.filter(
+        Cases.owner_id == current_user.id,
+        Cases.close_date == None
+    ).all()
+
+

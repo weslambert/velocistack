@@ -16,6 +16,7 @@ $.fn.serializeObject = function() {
 
 
 var jdata_menu_options = [];
+let current_cid = null;
 
 function clear_api_error() {
    $(".invalid-feedback").hide();
@@ -48,22 +49,69 @@ function eraseCookie(name) {
 function ellipsis_field( data, cutoff, wordbreak ) {
 
     data = data.toString();
+    let anchor = $('<div>');
 
     if ( data.length <= cutoff ) {
-        return filterXSS( data );
+        anchor.text(data);
+        return anchor.prop('outerHTML');
     }
 
-    var shortened = data.substr(0, cutoff-1);
+    let shortened = data.substr(0, cutoff-1);
 
     // Find the last white space character in the string
     if ( wordbreak ) {
         shortened = shortened.replace(/\s([^\s]*)$/, '');
     }
 
-    shortened = filterXSS( shortened );
+    // Build a new anchor tag with the new target
+    anchor.text(shortened + '…');
+    anchor.className = 'ellipsis';
+    anchor.title = data;
 
-    return '<div class="ellipsis" title="'+filterXSS(data)+'">'+shortened+'&#8230;</div>';
-};
+    return anchor.prop('outerHTML');
+}
+
+function ret_obj_dt_description(data) {
+    let anchor = $('<span>');
+    let dataContent = typeof data === 'object' ? JSON.stringify(data) : data;
+    anchor.attr('data-toggle', 'popover')
+        .attr('data-trigger', 'hover')
+        .attr('title', 'Description')
+        .attr('data-content', dataContent)
+        .attr('href', '#')
+        .css('cursor', 'pointer')
+        .text(ellipsis_field_raw(data, 64));
+
+    return anchor.prop('outerHTML');
+}
+
+function render_date(date, show_ms = false) {
+    // Remove the timezone information and the ms
+    let date_str = date.replace('T', ' ').replace('Z', '');
+    if (!show_ms) {
+        date_str = date_str.split('.')[0];
+    } else {
+        // remove nanoseconds
+        date_str = date_str.split('.')[0] + '.' + date_str.split('.')[1].substr(0, 3);
+    }
+
+    return date_str;
+}
+
+function ellipsis_field_raw( data, cutoff, wordbreak ) {
+
+    if (data.length <= cutoff) {
+        return data;
+    }
+
+    let shortened = data.substr(0, cutoff - 1);
+
+    if (wordbreak) {
+        shortened = shortened.replace(/\s([^\s]*)$/, '');
+    }
+
+    return shortened + '…';
+}
 
 function propagate_form_api_errors(data_error) {
 
@@ -105,19 +153,21 @@ function ajax_notify_error(jqXHR, url) {
 }
 
 function notify_error(message) {
+    let p = $('<p>')
+    p.text(message);
+    let data = "";
 
-    data = "";
-    if (typeof (message) == typeof ([])) {
+    if (typeof (message) === typeof ([])) {
         for (element in message) {
             data += element
         }
     } else {
         data = message;
     }
-    data = '<p>' + sanitizeHTML(data) + '</p>';
+    p.text(data)
     $.notify({
         icon: 'fas fa-triangle-exclamation',
-        message: data,
+        message: p.prop('outerHTML'),
         title: 'Error'
     }, {
         type: 'danger',
@@ -134,11 +184,33 @@ function notify_error(message) {
     });
 }
 
+function get_tag_from_data(data, classes) {
+    if (data === undefined || data === null || data.length === 0) {
+        return '';
+    }
+    let tag_anchor = $('<span>');
+    tag_anchor.addClass(classes);
+    tag_anchor.text(data);
+    tag_anchor.html('<i class="fa-solid fa-tag mr-1"></i> ' + tag_anchor.html());
+
+    return tag_anchor.prop('outerHTML');
+}
+
+function get_ioc_tag_from_data(data, classes) {
+    let tag_anchor = $('<span>');
+    tag_anchor.addClass(classes);
+    tag_anchor.text(data);
+    tag_anchor.html('<i class="fa-solid fa-virus"></i> ' + tag_anchor.html());
+
+    return tag_anchor.prop('outerHTML');
+}
+
 function notify_success(message) {
-    message = '<p>' + sanitizeHTML(message) + '</p>';
+    let p = $('<p>')
+    p.text(message);
     $.notify({
         icon: 'fas fa-check',
-        message: message
+        message: p.prop('outerHTML')
     }, {
         type: 'success',
         placement: {
@@ -154,27 +226,7 @@ function notify_success(message) {
     });
 }
 
-function notify_warning(message) {
-    message = '<p>' + sanitizeHTML(message) + '</p>';
-    $.notify({
-        icon: 'fas fa-exclamation',
-        message: message
-    }, {
-        type: 'warning',
-        placement: {
-            from: 'bottom',
-            align: 'left'
-        },
-        z_index: 2000,
-        timer: 2500,
-        animate: {
-            enter: 'animated fadeIn',
-            exit: 'animated fadeOut'
-        }
-    });
-}
-
-function notify_auto_api(data, silent_success) {
+function notify_auto_api(data, silent_success, silent_failure) {
     if (data.status === 'success') {
         if (silent_success === undefined || silent_success === false) {
             if (data.message.length === 0) {
@@ -187,7 +239,9 @@ function notify_auto_api(data, silent_success) {
         if (data.message.length === 0) {
             data.message = 'Operation failed';
         }
-        notify_error(data.message);
+        if (silent_failure === undefined || silent_failure === false) {
+            notify_error(data.message);
+        }
         return false;
     }
 }
@@ -215,16 +269,18 @@ function get_raw_request_api(uri, propagate_api_error, beforeSend_fn) {
         },
         error: function(jqXHR) {
             if (propagate_api_error) {
-                if(jqXHR.responseJSON && jqXHR.status == 400) {
+                if(jqXHR.responseJSON && jqXHR.status === 400) {
                     propagate_form_api_errors(jqXHR.responseJSON.data);
                 } else {
                     ajax_notify_error(jqXHR, this.url);
                 }
             } else {
-                if(jqXHR.responseJSON) {
-                    notify_error(jqXHR.responseJSON.message);
-                } else {
-                    ajax_notify_error(jqXHR, this.url);
+                if (jqXHR.status !== 400) {
+                    if(jqXHR.responseJSON) {
+                        notify_error(jqXHR.responseJSON.message);
+                    } else {
+                        ajax_notify_error(jqXHR, this.url);
+                    }
                 }
             }
         }
@@ -382,10 +438,13 @@ function updateURLParameter(url, param, paramVal) {
 }
 
 function get_caseid() {
-    queryString = window.location.search;
-    urlParams = new URLSearchParams(queryString);
+    if (current_cid === null) {
+        let queryString = window.location.search;
+        let urlParams = new URLSearchParams(queryString);
 
-    return urlParams.get('cid')
+        current_cid = urlParams.get('cid')
+    }
+    return current_cid
 }
 
 function is_redirect() {
@@ -506,9 +565,11 @@ var sanitizeHTML = function (str, options) {
     if (options) {
         return filterXSS(str, options);
     } else {
+        // Escape the html by default
         return filterXSS(str);
     }
 };
+
 
 function isWhiteSpace(s) {
   return /^\s+$/.test(s);
@@ -551,12 +612,30 @@ function capitalizeFirstLetter(string) {
 }
 
 function copy_object_link_md(data_type, node_id){
-    link = `[<i class="fa-solid fa-tag"></i> ${capitalizeFirstLetter(data_type)} #${node_id}](${buildShareLink(node_id)})`
+    let link = `[<i class="fa-solid fa-tag"></i> ${capitalizeFirstLetter(data_type)} #${node_id}](${buildShareLink(node_id)})`
     navigator.clipboard.writeText(link).then(function() {
         notify_success('MD link copied');
     }, function(err) {
         notify_error('Can\'t copy link. I printed it in console.');
         console.error('Shared link', err);
+    });
+}
+
+function copy_text_clipboardb(data){
+    navigator.clipboard.writeText(fromBinary64(data)).then(function() {
+        notify_success('Copied!');
+    }, function(err) {
+        notify_error('Can\'t copy link. I printed it in console.');
+        console.error(err);
+    });
+}
+
+function copy_text_clipboard(data){
+    navigator.clipboard.writeText(data).then(function() {
+        notify_success('Copied!');
+    }, function(err) {
+        notify_error('Can\'t copy link. I printed it in console.');
+        console.error(err);
     });
 }
 
@@ -576,7 +655,7 @@ function load_case_activity(){
             }
 
             entry =	`<li class="feed-item ${api_flag}" title='${sanitizeHTML(title)}'>
-                    <time class="date" datetime="${js_data[index].activity_date}">${js_data[index].activity_date}</time>
+                    <time class="date" datetime="${js_data[index].activity_date}">${formatTime(js_data[index].activity_date)}</time>
                     <span class="text">${sanitizeHTML(js_data[index].name)} - ${sanitizeHTML(js_data[index].activity_desc)}</span>
                     </li>`
             $('#case_activities').append(entry);
@@ -692,8 +771,18 @@ function load_menu_mod_options_modal(element_id, data_type, anchor) {
 }
 
 function get_row_id(row) {
-    ids_map = ["ioc_id","asset_id","task_id","id"];
-    for (id in ids_map) {
+    let ids_map = ["ioc_id","asset_id","task_id","id"];
+    for (let id in ids_map) {
+        if (row[ids_map[id]] !== undefined) {
+            return row[ids_map[id]];
+        }
+    }
+    return null;
+}
+
+function get_row_value(row, column) {
+    let ids_map = ["asset_name","ioc_value","filename","id"];
+    for (let id in ids_map) {
         if (row[ids_map[id]] !== undefined) {
             return row[ids_map[id]];
         }
@@ -780,8 +869,27 @@ function get_new_ace_editor(anchor_id, content_anchor, target_anchor, onchange_c
         }
     });
 
+    editor.commands.addCommand({
+        name: 'link',
+        bindKey: {win: "Ctrl-K", "mac": "Cmd-K"},
+        exec: function(editor) {
+            editor.insertSnippet('[${1:$SELECTION}](url)');
+        }
+    });
+
+    editor.commands.addCommand({
+        name: 'code',
+        bindKey: {win: "Ctrl-`", "mac": "Cmd-`"},
+        exec: function(editor) {
+            editor.insertSnippet('```${1:$SELECTION}```')
+        }
+    });
+
     if (live_preview === undefined || live_preview === true) {
         let textarea = $('#'+content_anchor);
+        // Remove any previous event handler
+        editor.getSession().off("change");
+
         editor.getSession().on("change", function () {
             if (onchange_callback !== undefined && onchange_callback !== null) {
                 onchange_callback();
@@ -815,7 +923,7 @@ function createSanitizeExtensionForImg() {
         if (match.startsWith('<img')) {
           return match.replace(/on\w+="[^"]*"/gi, '');
         }
-        return '';
+        return match;
       },
     },
   ];
@@ -830,7 +938,10 @@ function get_showdown_convert() {
         smoothLivePreview: true,
         strikethrough: true,
         tasklists: true,
-        extensions: ['bootstrap-tables', createSanitizeExtensionForImg()]
+        ghCodeBlocks: true,
+        backslashEscapesHTMLTags: true,
+        splitAdjacentBlockquotes: true,
+        extensions: [createSanitizeExtensionForImg, 'bootstrap-tables']
     });
 }
 
@@ -849,8 +960,9 @@ function do_md_filter_xss(html) {
                 code: [], pre: [], em: [], strong: [],
                 blockquote: [], del: [],
                 input: ['type', 'checked', 'disabled', 'class'],
-                table: ['class'], thead: [], tbody: [], tr: [], th: [], td: []
+                table: ['class'], thead: [], tbody: [], tr: [], th: [], td: [], br: []
             },
+
         onTagAttr: function (tag, name, value, isWhiteAttr) {
             if (tag === "i" && name === "class") {
                 if (iClassWhiteList.indexOf(value) === -1) {
@@ -865,8 +977,9 @@ function do_md_filter_xss(html) {
 
 const avatarCache = {};
 
-function get_avatar_initials(name, small, onClickFunction) {
-    const av_size = small ? 'avatar-sm' : 'avatar';
+function get_avatar_initials(name, small, onClickFunction, xsmall) {
+    let av_size = small ? 'avatar-sm' : 'avatar';
+    av_size = xsmall ? 'avatar-xs' : av_size;
     const onClick = onClickFunction ? `onclick="${onClickFunction}"` : '';
 
     if (avatarCache[name] && avatarCache[name][small ? 'small' : 'large']) {
@@ -878,13 +991,13 @@ function get_avatar_initials(name, small, onClickFunction) {
     const initial = name.split(' ');
     let snum;
 
-    if (initial.length > 1) {
+    if (initial.length > 1 && initial[1][0] !== undefined) {
         snum = initial[0][0].charCodeAt(0) + initial[1][0].charCodeAt(0);
     } else {
         snum = initial[0][0].charCodeAt(0);
     }
 
-    const initials = initial.map(i => i[0].toUpperCase()).join('');
+    const initials = initial.map(i => i[0] ? i[0].toUpperCase(): '').join('');
     const avatarColor = get_avatar_color(snum);
 
     const avatarHTMLin = `<span class="avatar-title avatar-iris rounded-circle" style="background-color:${avatarColor}; cursor:pointer;">${initials}</span>`
@@ -934,11 +1047,13 @@ function get_editor_headers(editor_instance, save, edition_btn) {
                 <div class="btn btn-sm btn-light mr-1" title="CTRL-SHIFT-2" onclick="${editor_instance}.insertSnippet`+"('## ${1:$SELECTION}')"+`;${editor_instance}.focus();">H2</div>
                 <div class="btn btn-sm btn-light mr-1" title="CTRL-SHIFT-3" onclick="${editor_instance}.insertSnippet`+"('### ${1:$SELECTION}');"+`${editor_instance}.focus();">H3</div>
                 <div class="btn btn-sm btn-light mr-1" title="CTRL-SHIFT-4" onclick="${editor_instance}.insertSnippet`+"('#### ${1:$SELECTION}');"+`${editor_instance}.focus();">H4</div>
-                <div class="btn btn-sm btn-light mr-1" title="Insert code" onclick="${editor_instance}.insertSnippet`+"('```${1:$SELECTION}```');"+`${editor_instance}.focus();"><i class="fa-solid fa-code"></i></div>
-                <div class="btn btn-sm btn-light mr-1" title="Insert link" onclick="${editor_instance}.insertSnippet`+"('[New link](${1:$SELECTION})');"+`${editor_instance}.focus();"><i class="fa-solid fa-link"></i></div>
+                <div class="btn btn-sm btn-light mr-1" title="CTRL+\`" onclick="${editor_instance}.insertSnippet`+"('```${1:$SELECTION}```');"+`${editor_instance}.focus();"><i class="fa-solid fa-code"></i></div>
+                <div class="btn btn-sm btn-light mr-1" title="CTRL-K" onclick="${editor_instance}.insertSnippet`+"('[${1:$SELECTION}](URL)');"+`${editor_instance}.focus();"><i class="fa-solid fa-link"></i></div>
                 <div class="btn btn-sm btn-light mr-1" title="Insert table" onclick="${editor_instance}.insertSnippet`+"('|\\t|\\t|\\t|\\n|--|--|--|\\n|\\t|\\t|\\t|\\n|\\t|\\t|\\t|');"+`${editor_instance}.focus();"><i class="fa-solid fa-table"></i></div>
                 <div class="btn btn-sm btn-light mr-1" title="Insert bullet list" onclick="${editor_instance}.insertSnippet`+"('\\n- \\n- \\n- ');"+`${editor_instance}.focus();"><i class="fa-solid fa-list"></i></div>
                 <div class="btn btn-sm btn-light mr-1" title="Insert numbered list" onclick="${editor_instance}.insertSnippet`+"('\\n1. a  \\n2. b  \\n3. c  ');"+`${editor_instance}.focus();"><i class="fa-solid fa-list-ol"></i></div>
+                <div class="btn btn-sm btn-transparent mr-1" title="Help" onclick="get_md_helper_modal();"><i class="fa-solid fa-question-circle"></i></div>
+
     `
     return header;
 }
@@ -1031,6 +1146,17 @@ function load_menu_mod_options(data_type, table, deletion_fn) {
                     action: function(rows){
                         row = rows[0];
                         copy_object_link_md(data_type, get_row_id(row));
+                    }
+                });
+
+                actionOptions.items.push({
+                    type: 'option',
+                    title: 'Copy',
+                    multi: false,
+                    iconClass: 'fa-regular fa-copy',
+                    action: function(rows){
+                        row = rows[0];
+                        copy_text_clipboard(get_row_value(row));
                     }
                 });
 
@@ -1140,7 +1266,17 @@ function get_custom_attributes_fields() {
 }
 
 function update_time() {
-    $('#current_date').text((new Date()).toLocaleString().slice(0, 17));
+    $('#current_date').text((new Date()).toLocaleString());
+}
+
+function formatTime(in_, format) {
+    if (typeof(in_) === typeof(1)){
+        let date = new Date(Math.floor(in_) * 1000);
+        return date.toLocaleString(undefined, format);
+    } else if (typeof(in_) === typeof('')) {
+        let date = new Date(in_);
+        return date.toLocaleString(undefined, format);
+    }
 }
 
 function download_file(filename, contentType, data) {
@@ -1171,10 +1307,10 @@ function modal_maximize() {
 }
 
 function modal_minimized(id, title) {
-    $("#" + id).modal("hide");
     $("#minimized_modal_title").text(title);
     $('#minimized_modal_box').data('target-id',id);
     $("#minimized_modal_box").show();
+    $("#" + id).modal("hide");
 }
 
 function hide_minimized_modal_box() {
@@ -1193,6 +1329,125 @@ function hide_table_search_input(columns) {
     }
   }
 
+function load_add_case() {
+    // Dynamically load the modal
+    $('#modal_add_case_content').load('/manage/cases/add/modal', function (response, status, xhr) {
+        if (status !== "success") {
+             ajax_notify_error(xhr, '/case/add');
+             return false;
+        }
+        $('#case_customer').selectpicker({
+            liveSearch: true,
+            title: "Select customer *",
+            style: "btn-outline-white",
+            size: 8
+        });
+        $('#case_template_id').selectpicker({
+            liveSearch: true,
+            title: "Select case template",
+            style: "btn-outline-white",
+            size: 8
+        });
+        $('#case_template_id').prepend(new Option('', ''));
+        $('#classification_id').selectpicker({
+            liveSearch: true,
+            title: "Select classification",
+            style: "btn-outline-white",
+            size: 8
+        });
+        $('#classification_id').prepend(new Option('', ''));
+
+        $('#modal_add_case').modal({show:true});
+    });
+}
+
+/* Submit event handler for new case */
+function submit_new_case() {
+
+    let data_sent = $('form#form_new_case').serializeObject();
+    let ret = get_custom_attributes_fields();
+    let has_error = ret[0].length > 0;
+    let attributes = ret[1];
+
+    if (has_error){return false;}
+
+    data_sent['custom_attributes'] = attributes;
+
+    send_add_case(data_sent);
+
+    return false;
+}
+
+function set_suggest_tags(anchor_id) {
+    $(`#${anchor_id}`).amsifySuggestags({
+        suggestionsAction : {
+            url : '/manage/tags/suggest',
+            method: 'GET',
+            timeout: -1,
+            minChars: 2,
+            minChange: -1,
+            delay: 100,
+            type: 'GET',
+            dataType: null
+        }
+    });
+}
+
+function send_add_case(data_sent) {
+
+    post_request_api('/manage/cases/add', JSON.stringify(data_sent), true, function () {
+        $('#submit_new_case_btn').text('Checking data..')
+            .attr("disabled", true)
+            .removeClass('bt-outline-success')
+            .addClass('btn-success', 'text-dark');
+    })
+    .done((data) => {
+        if (notify_auto_api(data, true)) {
+            let case_id = data.data.case_id;
+            swal("That's done !",
+                "Case has been successfully created",
+                "success",
+                {
+                    buttons: {
+                        dash: {
+                            text: "Go to dashboard",
+                            value: "dash",
+                            color: '#d33'
+                        },
+                        go_case: {
+                            text: "Switch to newly created case",
+                            value: "go_case"
+                        }
+                    }
+                }
+            ).then((value) => {
+                switch (value) {
+
+                    case "dash":
+                        window.location.replace("/dashboard" + case_param());
+                        break;
+
+                    case 'go_case':
+                        window.location.replace("/case?cid=" + case_id);
+
+                    default:
+                        window.location.replace("/case?cid=" + case_id);
+                }
+            });
+        }
+    })
+    .always(() => {
+        $('#submit_new_case_btn')
+        .attr("disabled", false)
+        .addClass('bt-outline-success')
+        .removeClass('btn-success', 'text-dark');
+    })
+    .fail(() => {
+        $('#submit_new_case_btn').text('Save');
+    })
+
+}
+
 function load_context_switcher() {
 
     var options = {
@@ -1205,6 +1460,9 @@ function load_context_switcher() {
                 emptyTitle: 'Select and Begin Typing',
                 statusInitialized: '',
         },
+        minLength: 0,
+        clearOnEmpty: false,
+        emptyRequest: true,
         preprocessData: function (data) {
             return context_data_parser(data);
         },
@@ -1212,18 +1470,18 @@ function load_context_switcher() {
     };
 
 
-    get_request_api('/context/get-cases/100')
+    get_request_api('/context/search-cases')
     .done((data) => {
         context_data_parser(data);
         $('#user_context').ajaxSelectPicker(options);
     });
 }
 
-function context_data_parser(data) {
+function context_data_parser(data, fire_modal = true) {
     if(notify_auto_api(data, true)) {
         $('#user_context').empty();
 
-        $('#user_context').append('<optgroup label="Opened" id="switch_case_opened_opt"></optgroup>');
+        $('#user_context').append('<optgroup label="Open" id="switch_case_opened_opt"></optgroup>');
         $('#user_context').append('<optgroup label="Closed" id="switch_case_closed_opt"></optgroup>');
         ocs = data.data;
         ret_data = [];
@@ -1241,7 +1499,10 @@ function context_data_parser(data) {
             }
         }
 
-        $('#modal_switch_context').modal("show");
+        if (fire_modal) {
+            $('#modal_switch_context').modal("show");
+        }
+
         $('#user_context').selectpicker('refresh');
         $('#user_context').selectpicker('val', get_caseid());
         return ret_data;
@@ -1257,6 +1518,16 @@ function focus_on_input_chg_case(){
              return false;
         }
   });
+}
+
+function get_md_helper_modal() {
+    $('#modal_md_helper').load('/case/md-helper?cid=' + get_caseid(), function (response, status, xhr) {
+         if (status !== "success") {
+             ajax_notify_error(xhr, '/case/md-helper?cid=' + get_caseid());
+             return false;
+            }
+         $('#shortcutModal').modal("show");
+    });
 }
 
 function split_bool(split_str) {
@@ -1419,6 +1690,23 @@ function do_deletion_prompt(message, force_prompt=false) {
     }
 }
 
+function toBinary64(string) {
+  const codeUnits = new Uint16Array(string.length);
+  for (let i = 0; i < codeUnits.length; i++) {
+    codeUnits[i] = string.charCodeAt(i);
+  }
+  return btoa(String.fromCharCode(...new Uint8Array(codeUnits.buffer)));
+}
+
+function fromBinary64(encoded) {
+  const binary = atob(encoded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return String.fromCharCode(...new Uint16Array(bytes.buffer));
+}
+
 $(document).ready(function(){
     notify_redirect();
     update_time();
@@ -1527,17 +1815,33 @@ $(document).ready(function(){
       return [{
         type: "output",
         filter: function (html, converter, options) {
-          // parse the html string
-          var liveHtml = $('<div></div>').html(html);
-          $('table', liveHtml).each(function(){
-            var table = $(this);
+            let parser = new DOMParser();
 
-            // table bootstrap classes
-            table.addClass('table table-striped table-bordered table-hover table-sm')
-            // make table responsive
-            .wrap('<div class="table-responsive"></div>');
-          });
-          return liveHtml.html();
+            html = '<div id="fsjpowefjdwe">' + html + '</div>';
+
+            let doc = parser.parseFromString(html, 'text/html');
+
+            let tables = doc.getElementsByTagName('table');
+
+            for (let i = 0; i < tables.length; i++) {
+                let table = tables[i];
+
+                table.classList.add('table', 'table-striped', 'table-bordered', 'table-hover', 'table-sm');
+
+                let div = doc.createElement('div');
+                div.classList.add('table-responsive');
+
+                table.parentNode.insertBefore(div, table);
+                div.appendChild(table);
+            }
+
+            let serializer = new XMLSerializer();
+            let newHtml = serializer.serializeToString(doc);
+
+            let innerHtml = doc.getElementById('fsjpowefjdwe').innerHTML;
+
+            return innerHtml;
+
         }
           }];
     });

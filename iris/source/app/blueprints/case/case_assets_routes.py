@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS) - DFIR-IRIS Team
 #  ir@cyberactionlab.net - contact@dfir-iris.org
@@ -164,7 +162,7 @@ def add_asset_modal(caseid):
     ioc = get_iocs(caseid)
     attributes = get_default_custom_attributes('asset')
 
-    return render_template("modal_add_case_asset.html", form=form, asset=None, ioc=ioc, attributes=attributes)
+    return render_template("modal_add_case_multi_asset.html", form=form, asset=None, ioc=ioc, attributes=attributes)
 
 
 @case_assets_blueprint.route('/case/assets/add', methods=['POST'])
