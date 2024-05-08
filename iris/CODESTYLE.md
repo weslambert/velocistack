@@ -1,16 +1,64 @@
 # Coding style 
 
-If you wish to develop in DFIR-IRIS, please make sure to read the following tips.   
+If you wish to develop in DFIR-IRIS, please make sure to read the following tips.
 
-## Commits 
-Try to follow the repository convention : 
+## Workflow
+
+- development is done on branch `develop`
+  ```
+  git switch develop
+  ```
+- safe and small modifications may be directly performed on branch `develop`
+- modifications which either imply more work or are risky, must be performed on a branch of their own
+  ```
+  git switch -c <branch-name>
+  git push --set-upstream origin <branch-name>
+  ```
+- when work on the branch is ready to be published, then a pull request (PR) is created from the github interface.
+  Do not forget to choose `develop` as the base branch (by default it is set to `master`,
+  more information [here](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request#changing-the-branch-range-and-destination-repository)).
+
+
+### Commits
+Try to follow the repository convention:
 
 - If it's not linked to an issue, use the format `[action] Commit message`, with `action` being a 3 letters action related to the commit, eg `ADD`for additions, `DEL` for deletions, `IMP` for improvements, etc.
-- If it's linked to an issue, prepend with the issue ID, i.e `[#issue_id][action] Commit message` 
+- If it's linked to an issue, prepend with the issue ID, i.e `[#issue_id][action] Commit message`
+
+## License header
+
+New files should be prefixed by the following license header, where `${current_year}` is replaced by the current year
+(for instance 2024):
+```
+#  IRIS Source Code
+#  Copyright (C) ${current_year} - DFIR-IRIS
+#  contact@dfir-iris.org
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 3 of the License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+```
+
+## Python coding rules
+
+* do not prefix files with any shebang, such as:
+```python
+#!/usr/bin/env python3
+```
 
 ## Code
 The code should be pretty easy to apprehend. It's not perfect but it will improve over time.   
-Some documentation about development is available [here](https://dfir-iris.github.io/development/).   
+Some documentation about development is available [here](https://docs.dfir-iris.org/development/).   
 Here are the main takes : 
 
 - **Routes** : these are the things that describes how URI should be handled. Routes are split by categories as in the UI menu. 

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import uuid
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy import BigInteger, Table, Boolean
@@ -45,12 +47,14 @@ class Alert(db.Model):
     modification_history = Column(JSON)
     alert_customer_id = Column(ForeignKey('client.client_id'), nullable=False)
     alert_classification_id = Column(ForeignKey('case_classification.id'))
+    alert_resolution_status_id = Column(ForeignKey('alert_resolution_status.resolution_status_id'), nullable=True)
 
     owner = relationship('User', foreign_keys=[alert_owner_id])
     severity = relationship('Severity')
     status = relationship('AlertStatus')
     customer = relationship('Client')
     classification = relationship('CaseClassification')
+    resolution_status = relationship('AlertResolutionStatus')
 
     cases = relationship('Cases', secondary="alert_case_association", back_populates='alerts')
     comments = relationship('Comments', back_populates='alert', cascade='all, delete-orphan')
@@ -75,6 +79,14 @@ class AlertStatus(db.Model):
     status_description = Column(Text)
 
 
+class AlertResolutionStatus(db.Model):
+    __tablename__ = 'alert_resolution_status'
+
+    resolution_status_id = Column(Integer, primary_key=True)
+    resolution_status_name = Column(Text, nullable=False, unique=True)
+    resolution_status_description = Column(Text)
+
+
 class SimilarAlertsCache(db.Model):
     __tablename__ = 'similar_alerts_cache'
 
@@ -93,10 +105,12 @@ class SimilarAlertsCache(db.Model):
     asset_type = relationship('AssetsType')
     ioc_type = relationship('IocType')
 
-    def __init__(self, customer_id, alert_id, asset_name=None, ioc_value=None, asset_type_id=None, ioc_type_id=None):
+    def __init__(self, customer_id, alert_id, asset_name=None, ioc_value=None, asset_type_id=None, ioc_type_id=None,
+                 created_at=None):
         self.customer_id = customer_id
         self.asset_name = asset_name
         self.ioc_value = ioc_value
         self.alert_id = alert_id
         self.asset_type_id = asset_type_id
         self.ioc_type_id = ioc_type_id
+        self.created_at = created_at if created_at else datetime.utcnow()

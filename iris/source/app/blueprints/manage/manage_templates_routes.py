@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -94,8 +92,10 @@ def report_templates_list(caseid):
         ReportType.name.label('type_name'),
         CaseTemplateReport.id
     ).join(
-        CaseTemplateReport.created_by_user,
-        CaseTemplateReport.language,
+        CaseTemplateReport.created_by_user
+    ).join(
+        CaseTemplateReport.language
+    ).join(
         CaseTemplateReport.report_type
     ).all()
 

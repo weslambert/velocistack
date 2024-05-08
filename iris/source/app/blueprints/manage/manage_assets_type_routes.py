@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -30,6 +28,7 @@ from flask import url_for
 
 from app import app
 from app import db
+from app.datamgmt.manage.manage_case_objs import search_asset_type_by_name
 from app.forms import AddAssetForm
 from app.iris_engine.utils.tracker import track_activity
 from app.models.authorization import Permissions
@@ -41,12 +40,12 @@ from app.util import ac_requires
 from app.util import response_error
 from app.util import response_success
 
-manage_assets_blueprint = Blueprint('manage_assets',
-                                    __name__,
-                                    template_folder='templates')
+manage_assets_type_blueprint = Blueprint('manage_assets_type',
+                                         __name__,
+                                         template_folder='templates')
 
 
-@manage_assets_blueprint.route('/manage/asset-type/list')
+@manage_assets_type_blueprint.route('/manage/asset-type/list')
 @ac_api_requires(no_cid_required=True)
 def list_assets(caseid):
     # Get all assets
@@ -70,7 +69,7 @@ def list_assets(caseid):
     return response_success("", data=data)
 
 
-@manage_assets_blueprint.route('/manage/asset-type/<int:cur_id>', methods=['GET'])
+@manage_assets_type_blueprint.route('/manage/asset-type/<int:cur_id>', methods=['GET'])
 @ac_api_requires(no_cid_required=True)
 def view_asset_api(cur_id, caseid):
     # Get all assets
@@ -89,7 +88,7 @@ def view_asset_api(cur_id, caseid):
     return response_success("", data=asset_type._asdict())
 
 
-@manage_assets_blueprint.route('/manage/asset-type/update/<int:cur_id>/modal', methods=['GET'])
+@manage_assets_type_blueprint.route('/manage/asset-type/update/<int:cur_id>/modal', methods=['GET'])
 @ac_requires(Permissions.server_administrator, no_cid_required=True)
 def view_assets_modal(cur_id, caseid, url_redir):
     if url_redir:
@@ -110,7 +109,7 @@ def view_assets_modal(cur_id, caseid, url_redir):
     return render_template("modal_add_asset_type.html", form=form, assettype=asset)
 
 
-@manage_assets_blueprint.route('/manage/asset-type/update/<int:cur_id>', methods=['POST'])
+@manage_assets_type_blueprint.route('/manage/asset-type/update/<int:cur_id>', methods=['POST'])
 @ac_api_requires(Permissions.server_administrator, no_cid_required=True)
 def view_assets(cur_id, caseid):
     asset_type = AssetsType.query.filter(AssetsType.asset_id == cur_id).first()
@@ -141,7 +140,7 @@ def view_assets(cur_id, caseid):
     return response_error("Unexpected error server-side. Nothing updated")
 
 
-@manage_assets_blueprint.route('/manage/asset-type/add/modal', methods=['GET'])
+@manage_assets_type_blueprint.route('/manage/asset-type/add/modal', methods=['GET'])
 @ac_requires(Permissions.server_administrator, no_cid_required=True)
 def add_assets_modal(caseid, url_redir):
     if url_redir:
@@ -151,7 +150,7 @@ def add_assets_modal(caseid, url_redir):
     return render_template("modal_add_asset_type.html", form=form, assettype=None)
 
 
-@manage_assets_blueprint.route('/manage/asset-type/add', methods=['POST'])
+@manage_assets_type_blueprint.route('/manage/asset-type/add', methods=['POST'])
 @ac_api_requires(Permissions.server_administrator, no_cid_required=True)
 def add_assets(caseid):
 
@@ -182,7 +181,7 @@ def add_assets(caseid):
     return response_error("Unexpected error server-side. Nothing updated")
 
 
-@manage_assets_blueprint.route('/manage/asset-type/delete/<int:cur_id>', methods=['POST'])
+@manage_assets_type_blueprint.route('/manage/asset-type/delete/<int:cur_id>', methods=['POST'])
 @ac_api_requires(Permissions.server_administrator, no_cid_required=True)
 def delete_assets(cur_id, caseid):
     asset = AssetsType.query.filter(AssetsType.asset_id == cur_id).first()
@@ -211,3 +210,38 @@ def delete_assets(cur_id, caseid):
     track_activity("Deleted asset type ID {asset_id}".format(asset_id=cur_id), caseid=caseid, ctx_less=True)
 
     return response_success("Deleted asset type ID {cur_id} successfully".format(cur_id=cur_id))
+
+
+@manage_assets_type_blueprint.route('/manage/asset-types/search', methods=['POST'])
+@ac_api_requires(no_cid_required=True)
+def search_assets_type(caseid):
+    """Searches for assets types in the database.
+
+    This function searches for assets types in the database with a name that contains the specified search term.
+    It returns a JSON response containing the matching assets types.
+
+    Args:
+        caseid: The ID of the case associated with the request.
+
+    Returns:
+        A JSON response containing the matching assets types.
+
+    """
+    if not request.is_json:
+        return response_error("Invalid request")
+
+    asset_type = request.json.get('asset_type')
+    if asset_type is None:
+        return response_error("Invalid asset type. Got None")
+
+    exact_match = request.json.get('exact_match', False)
+
+    # Search for assets types with a name that contains the specified search term
+    assets_type = search_asset_type_by_name(asset_type, exact_match=exact_match)
+    if not assets_type:
+        return response_error("No asset types found")
+
+    # Serialize the assets types and return them in a JSON response
+    assetst_schema = AssetTypeSchema(many=True)
+    return response_success("", data=assetst_schema.dump(assets_type))
+

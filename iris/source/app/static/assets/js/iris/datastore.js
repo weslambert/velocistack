@@ -66,13 +66,14 @@ function build_ds_tree(data, tree_node) {
                 can_delete = `<div class="dropdown-divider"></div><a href="#" class="dropdown-item text-danger" onclick="delete_ds_folder('${node}');"><small class="fa fa-trash mr-2"></small>Delete</a>`;
             }
             jnode = `<li>
-                    <span id='${node}' title='Folder ID ${node}' data-node-id="${node}"><i class="fa-regular fa-folder"></i> ${data[node].name}</span> <i class="fas fa-plus ds-folder-menu" role="menu" style="cursor:pointer;" data-toggle="dropdown" aria-expanded="false"></i>
+                    <span id='${node}' title='Folder ID ${node}' data-node-id="${node}"><i class="fa-regular fa-folder"></i> ${sanitizeHTML(data[node].name)}</span> <i class="fas fa-plus ds-folder-menu" role="menu" style="cursor:pointer;" data-toggle="dropdown" aria-expanded="false"></i>
                         <div class="dropdown-menu" role="menu">
                                 <a href="#" class="dropdown-item" onclick="add_ds_folder('${node}');return false;"><small class="fa-solid fa-folder mr-2"></small>Add subfolder</a>
                                 <a href="#" class="dropdown-item" onclick="add_ds_file('${node}');return false;"><small class="fa-solid fa-file mr-2"></small>Add file</a>
+                                <a href="#" class="dropdown-item" onclick="add_ds_multi_files('${node}');return false;"><small class="fa-solid fa-file-circle-plus fa-box mr-2"></small>Add multiple files</a>
                                 <div class="dropdown-divider"></div>
                                 <a href="#" class="dropdown-item" onclick="move_ds_folder('${node}');return false;"><small class="fa fa-arrow-right-arrow-left mr-2"></small>Move</a>
-                                <a href="#" class="dropdown-item" onclick="rename_ds_folder('${node}', '${data[node].name}');return false;"><small class="fa-solid fa-pencil mr-2"></small>Rename</a>
+                                <a href="#" class="dropdown-item" onclick="rename_ds_folder('${node}', '${sanitizeHTML(data[node].name)}');return false;"><small class="fa-solid fa-pencil mr-2"></small>Rename</a>
                                 ${can_delete}
                         </div>
                     <ul id='tree-${node}'></ul>
@@ -106,12 +107,12 @@ function build_ds_tree(data, tree_node) {
             icn_content = btoa(icon + icon_lock);
             jnode = `<li>
                 <span id='${node}' data-file-id="${node}" title="ID : ${data[node].file_id}\nUUID : ${data[node].file_uuid}" class='tree-leaf'>
-                      <span role="menu" style="cursor:pointer;" data-toggle="dropdown" aria-expanded="false">${icon}${icon_lock} ${data[node].file_original_name}</span>
+                      <span role="menu" style="cursor:pointer;" data-toggle="dropdown" aria-expanded="false">${icon}${icon_lock} ${sanitizeHTML(data[node].file_original_name)}</span>
                       <i class="fa-regular fa-circle ds-file-selector" style="cursor:pointer;display:none;" onclick="ds_file_select('${node}');"></i>
                         <div class="dropdown-menu" role="menu">
                                 <a href="#" class="dropdown-item" onclick="get_link_ds_file('${node}');return false;"><small class="fa fa-link mr-2"></small>Link</a>
-                                <a href="#" class="dropdown-item" onclick="get_mk_link_ds_file('${node}', '${data[node].file_original_name}', '${icn_content}', '${has_password}');return false;"><small class="fa-brands fa-markdown mr-2"></small>Markdown link</a>
-                                <a href="#" class="dropdown-item" onclick="download_ds_file('${node}', '${data[node].file_original_name}');return false;"><small class="fa-solid fa-download mr-2"></small>Download</a>
+                                <a href="#" class="dropdown-item" onclick="get_mk_link_ds_file('${node}', '${toBinary64(data[node].file_original_name)}', '${icn_content}', '${has_password}');return false;"><small class="fa-brands fa-markdown mr-2"></small>Markdown link</a>
+                                <a href="#" class="dropdown-item" onclick="download_ds_file('${node}');return false;"><small class="fa-solid fa-download mr-2"></small>Download</a>
                                 <div class="dropdown-divider"></div>
                                 <a href="#" class="dropdown-item" onclick="info_ds_file('${node}');return false;"><small class="fa fa-eye mr-2"></small>Info</a>
                                 <a href="#" class="dropdown-item" onclick="edit_ds_file('${node}');return false;"><small class="fa fa-pencil mr-2"></small>Edit</a>
@@ -227,7 +228,20 @@ function save_ds_mod_folder() {
 
 function add_ds_file(node) {
     node = node.replace('d-', '');
-    url = '/datastore/file/add/'+ node +'/modal' + case_param();
+    let url = '/datastore/file/add/'+ node +'/modal' + case_param();
+    $('#modal_ds_file_content').load(url, function (response, status, xhr) {
+        if (status !== "success") {
+             ajax_notify_error(xhr, url);
+             return false;
+        }
+
+        $('#modal_ds_file').modal("show");
+    });
+}
+
+function add_ds_multi_files(node) {
+    node = node.replace('d-', '');
+    let url = '/datastore/file/add/'+ node +'/multi-modal' + case_param();
     $('#modal_ds_file_content').load(url, function (response, status, xhr) {
         if (status !== "success") {
              ajax_notify_error(xhr, url);
@@ -264,9 +278,41 @@ function info_ds_file(node) {
     });
 }
 
+async function save_ds_multi_files(node, index_i) {
+    let formData = new FormData($('#form_new_ds_files')[0]);
+    let totalFiles = $('#input_upload_ds_files').prop('files').length;
+    let index = index_i === undefined ? 0 : index_i;
+    if (index >= totalFiles) {
+        window.swal.close();
+        $('#modal_ds_file').modal("hide");
+        return;
+    }
+    let file = $('#input_upload_ds_files').prop('files')[index];
+    formData.append('file_content', file);
+    formData.append('file_original_name', file.name);
+    let uri = '/datastore/file/add/' + node;
+    await post_request_data_api(uri, formData, true, function () {
+        window.swal({
+            title: `File ${file.name} is uploading. (${index}/${totalFiles} files)`,
+            text: "Please wait. This window will close automatically when the file is uploaded.",
+            icon: "/static/assets/img/loader.gif",
+            button: false,
+            allowOutsideClick: false
+        });
+    }).then((data) => {
+        notify_auto_api(data);
+        index += 1;
+        save_ds_multi_files(node, index);
+        load_datastore();
+    }).always((data) => {
+        window.swal.close();
+    });
+}
+
 function save_ds_file(node, file_id) {
     var formData = new FormData($('#form_new_ds_file')[0]);
     formData.append('file_content', $('#input_upload_ds_file').prop('files')[0]);
+    let uri = '';
 
     if (file_id === undefined) {
         uri = '/datastore/file/add/' + node;
@@ -524,13 +570,16 @@ function build_dsfile_view_link(file_id) {
 
 function get_mk_link_ds_file(file_id, filename, file_icon, has_password) {
 
-   link = build_dsfile_view_link(file_id);
+   let link = build_dsfile_view_link(file_id);
+
+   filename = sanitizeHTML(fromBinary64(filename));
+
 
    if (has_password == 'false' && ['png', 'svg', 'jpeg', 'jpg', 'webp', 'bmp', 'gif'].includes(filename.split('.').pop())) {
-        mk_link = `![${filename}](${link} =40%x40%)`;
+        mk_link = `![\`${filename}\`](${link} =60%x40%)`;
     } else {
         file_icon = atob(file_icon);
-        mk_link = `[${file_icon} [DS] ${filename}](${link})`;
+        mk_link = `[${file_icon} [DS] \`${filename}\`](${link})`;
     }
 
    navigator.clipboard.writeText(mk_link).then(function() {
@@ -542,8 +591,8 @@ function get_mk_link_ds_file(file_id, filename, file_icon, has_password) {
 
 }
 
-function download_ds_file(file_id, filename) {
-    link = build_dsfile_view_link(file_id);
+function download_ds_file(file_id) {
+    let link = build_dsfile_view_link(file_id);
     downloadURI(link, name);
 }
 

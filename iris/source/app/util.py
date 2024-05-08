@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2022 - DFIR IRIS Team
 #  contact@dfir-iris.org
@@ -23,25 +21,22 @@ import base64
 import datetime
 import decimal
 import hashlib
+import json
+import jwt
 import logging as log
+import marshmallow
 import pickle
 import random
+import requests
 import shutil
 import string
 import traceback
 import uuid
 import weakref
-from flask_socketio import Namespace
-from functools import wraps
-from pathlib import Path
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import hmac
-from cryptography.exceptions import InvalidSignature
-
-import jwt
-import requests
 from flask import Request
-import json
 from flask import render_template
 from flask import request
 from flask import session
@@ -49,18 +44,20 @@ from flask import url_for
 from flask_login import current_user
 from flask_login import login_user
 from flask_wtf import FlaskForm
+from functools import wraps
 from jwt import PyJWKClient
+from pathlib import Path
 from pyunpack import Archive
 from requests.auth import HTTPBasicAuth
 from sqlalchemy.ext.declarative import DeclarativeMeta
 from sqlalchemy.orm.attributes import flag_modified
 from werkzeug.utils import redirect
 
-from app import TEMPLATE_PATH, socket_io
+from app import TEMPLATE_PATH
 from app import app
 from app import db
-from app.datamgmt.case.case_db import case_exists
 from app.datamgmt.case.case_db import get_case
+from app.datamgmt.manage.manage_access_control_db import user_has_client_access
 from app.datamgmt.manage.manage_users_db import get_user
 from app.iris_engine.access_control.utils import ac_fast_check_user_has_case_access
 from app.iris_engine.access_control.utils import ac_get_effective_permissions_of_user
@@ -218,11 +215,14 @@ def get_caseid_from_request_data(request_data, no_cid_required):
     caseid = request_data.args.get('cid', default=None, type=int)
     redir = False
     has_access = True
+    js_d = None
 
     if not caseid and not no_cid_required:
+
         try:
 
-            js_d = request_data.get_json()
+            if request_data.content_type == 'application/json':
+                js_d = request_data.get_json()
 
             if js_d:
                 caseid = js_d.get('cid')
@@ -232,6 +232,7 @@ def get_caseid_from_request_data(request_data, no_cid_required):
                 redir, caseid, has_access = set_caseid_from_current_user()
 
         except Exception as e:
+            print(request_data.url)
             redir, caseid, has_access = handle_exception(e, request_data)
 
     return redir, caseid, has_access
@@ -263,9 +264,20 @@ def log_exception_and_error(e):
 def handle_no_cid_required(request, no_cid_required):
     if no_cid_required:
         js_d = request.get_json(silent=True)
-        caseid = js_d.get('cid') if js_d else None
-        if caseid:
-            request.json.pop('cid')
+        caseid = None
+
+        try:
+
+            if type(js_d) == str:
+                js_d = json.loads(js_d)
+
+            caseid = js_d.get('cid') if type(js_d) == dict else None
+            if caseid and 'cid' in request.json:
+                request.json.pop('cid')
+
+        except Exception:
+            return False, None, False
+
         return False, caseid, True
 
     return False, None, False
@@ -447,11 +459,11 @@ def _oidc_proxy_authentication_process(incoming_request: Request):
         return False
 
 
-def not_authenticated_redirection_url():
+def not_authenticated_redirection_url(request_url: str):
     redirection_mapper = {
         "oidc_proxy": lambda: app.config.get("AUTHENTICATION_PROXY_LOGOUT_URL"),
-        "local": lambda: url_for('login.login'),
-        "ldap": lambda: url_for('login.login')
+        "local": lambda: url_for('login.login', next=request_url),
+        "ldap": lambda: url_for('login.login', next=request_url)
     }
 
     return redirection_mapper.get(app.config.get("AUTHENTICATION_TYPE"))()
@@ -526,7 +538,7 @@ def ac_case_requires(*access_level):
         @wraps(f)
         def wrap(*args, **kwargs):
             if not is_user_authenticated(request):
-                return redirect(not_authenticated_redirection_url())
+                return redirect(not_authenticated_redirection_url(request.full_path))
 
             else:
                 redir, caseid, has_access = get_case_access(request, access_level)
@@ -547,12 +559,12 @@ def ac_socket_requires(*access_level):
         @wraps(f)
         def wrap(*args, **kwargs):
             if not is_user_authenticated(request):
-                return redirect(not_authenticated_redirection_url())
+                return redirect(not_authenticated_redirection_url(request.full_path))
 
             else:
                 chan_id = args[0].get('channel')
                 if chan_id:
-                    case_id = int(chan_id.replace('case-', ''))
+                    case_id = int(chan_id.replace('case-', '').split('-')[0])
                 else:
                     return ac_return_access_denied(caseid=0)
 
@@ -572,7 +584,7 @@ def ac_requires(*permissions, no_cid_required=False):
         def wrap(*args, **kwargs):
 
             if not is_user_authenticated(request):
-                return redirect(not_authenticated_redirection_url())
+                return redirect(not_authenticated_redirection_url(request.full_path))
 
             else:
                 redir, caseid, _ = get_case_access(request, [], no_cid_required=no_cid_required)
@@ -629,6 +641,32 @@ def endpoint_deprecated(message, version):
         @wraps(f)
         def wrap(*args, **kwargs):
             return response_error(f"Endpoint deprecated in {version}. {message}.", status=410)
+        return wrap
+    return inner_wrap
+
+
+def ac_api_requires_client_access():
+    def inner_wrap(f):
+        @wraps(f)
+        def wrap(*args, **kwargs):
+            client_id = kwargs.get('client_id')
+            if not user_has_client_access(current_user.id, client_id):
+                return response_error("Permission denied", status=403)
+
+            return f(*args, **kwargs)
+        return wrap
+    return inner_wrap
+
+
+def ac_requires_client_access():
+    def inner_wrap(f):
+        @wraps(f)
+        def wrap(*args, **kwargs):
+            client_id = kwargs.get('client_id')
+            if not user_has_client_access(current_user.id, client_id):
+                return ac_return_access_denied()
+
+            return f(*args, **kwargs)
         return wrap
     return inner_wrap
 
@@ -790,7 +828,34 @@ def str_to_bool(value):
     if value is None:
         return False
 
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, int):
+        return bool(value)
+
     return value.lower() in ['true', '1', 'yes', 'y', 't']
 
 
+def assert_type_mml(input_var: any, field_name: str,  type: type, allow_none: bool = False):
+    if input_var is None:
+        if allow_none is False:
+            raise marshmallow.ValidationError("Invalid data - non null expected",
+                                            field_name=field_name if field_name else "type")
+        else:
+            return True
+    
+    if isinstance(input_var, type):
+        return True
+    
+    try:
 
+        if isinstance(type(input_var), type):
+            return True
+
+    except Exception as e:
+        log.error(e)
+        print(e)
+        
+    raise marshmallow.ValidationError("Invalid data type",
+                                      field_name=field_name if field_name else "type")

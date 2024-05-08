@@ -23,7 +23,7 @@
                      <div class="row mt-4">
                          <div class="col-12 d-flex">
                              <button type="button" class="btn btn-default mr-auto" data-dismiss="modal">Close</button>
-                             <button type="button" class="btn btn-outline-success ml-auto" id="submit_set_context">Save</button>
+                             <button type="button" class="btn btn-outline-success ml-auto" id="submit_set_context">Switch</button>
                          </div>
                      </div>
                   </div>
@@ -31,7 +31,12 @@
           </div><!-- /.modal-content -->
       </div><!-- /.modal-dialog -->
     </div>
-
+    <div class="modal" tabindex="-1" role="dialog" id="modal_add_case" data-backdrop="true">
+        <div class="modal-lg modal-dialog" role="document">
+            <div class="modal-content" id="modal_add_case_content">
+            </div>
+        </div>
+    </div>
     <div class="modal" tabindex="-1" role="dialog" id="modal_add_tasklog" data-backdrop="true">
       <div class="modal-lg modal-dialog" role="document">
         <form method="post" action="" id="form_add_tasklog">

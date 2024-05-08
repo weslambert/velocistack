@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2023 - DFIR-IRIS
 #  contact@dfir-iris.org
@@ -34,6 +32,7 @@ from app.datamgmt.alerts.alerts_db import get_filtered_alerts, get_alert_by_id, 
     get_alert_comments, delete_alert_comment, get_alert_comment, delete_similar_alert_cache, delete_alerts, \
     create_case_from_alerts
 from app.datamgmt.case.case_db import get_case
+from app.datamgmt.manage.manage_access_control_db import check_ua_case_client, user_has_client_access
 from app.iris_engine.access_control.utils import ac_set_new_case_access
 from app.iris_engine.module_handler.module_handler import call_modules_hook
 from app.iris_engine.utils.tracker import track_activity
@@ -128,7 +127,9 @@ def alerts_list_route(caseid) -> Response:
         per_page=per_page,
         sort=request.args.get('sort'),
         assets=alert_assets,
-        iocs=alert_iocs
+        iocs=alert_iocs,
+        resolution_status=request.args.get('alert_resolution_id', type=int),
+        current_user_id=current_user.id
     )
 
     if filtered_data is None:
@@ -178,6 +179,10 @@ def alerts_add_route(caseid) -> Response:
         # Deserialize the JSON data into an Alert object
         new_alert = alert_schema.load(data)
 
+        # Verify the user is entitled to create an alert for the client
+        if not user_has_client_access(current_user.id, new_alert.alert_customer_id):
+            return response_error('User not entitled to create alerts for the client')
+
         new_alert.alert_creation_time = datetime.utcnow()
 
         new_alert.iocs = iocs
@@ -192,7 +197,8 @@ def alerts_add_route(caseid) -> Response:
 
         # Cache the alert for similarities check
         cache_similar_alert(new_alert.alert_customer_id, assets=assets_list,
-                            iocs=iocs_list, alert_id=new_alert.alert_id)
+                            iocs=iocs_list, alert_id=new_alert.alert_id,
+                            creation_date=new_alert.alert_source_event_time)
         
         new_alert = call_modules_hook('on_postload_alert_create', data=new_alert, caseid=caseid)
 
@@ -200,8 +206,7 @@ def alerts_add_route(caseid) -> Response:
 
         # Emit a socket io event
         app.socket_io.emit('new_alert', json.dumps({
-            'alert_id': new_alert.alert_id,
-            'alert_title': new_alert.alert_title
+            'alert_id': new_alert.alert_id
         }), namespace='/alerts')
 
         # Return the newly created alert as JSON
@@ -236,6 +241,9 @@ def alerts_get_route(caseid, alert_id) -> Response:
     if alert is None:
         return response_error('Alert not found')
 
+    if not user_has_client_access(current_user.id, alert.alert_customer_id):
+        return response_error('Alert not found')
+
     alert_dump = alert_schema.dump(alert)
 
     # Get similar alerts
@@ -266,17 +274,20 @@ def alerts_similarities_route(caseid, alert_id) -> Response:
     if alert is None:
         return response_error('Alert not found')
 
+    if not user_has_client_access(current_user.id, alert.alert_customer_id):
+        return response_error('Alert not found')
+
     open_alerts = request.args.get('open-alerts', 'false').lower() == 'true'
     open_cases = request.args.get('open-cases', 'false').lower() == 'true'
     closed_cases = request.args.get('closed-cases', 'false').lower() == 'true'
     closed_alerts = request.args.get('closed-alerts', 'false').lower() == 'true'
-    days_back = request.args.get('days-back', 7, type=int)
+    days_back = request.args.get('days-back', 30, type=int)
     number_of_results = request.args.get('number-of-nodes', 100, type=int)
 
     if number_of_results < 0:
         number_of_results = 100
     if days_back < 0:
-        days_back = 7
+        days_back = 30
 
     # Get similar alerts
     similar_alerts = get_related_alerts_details(alert.alert_customer_id, alert.assets, alert.iocs,
@@ -307,7 +318,13 @@ def alerts_update_route(alert_id, caseid) -> Response:
     if not alert:
         return response_error('Alert not found')
 
+    if not user_has_client_access(current_user.id, alert.alert_customer_id):
+        return response_error('User not entitled to update alerts for the client', status=403)
+
     alert_schema = AlertSchema()
+
+    do_resolution_hook = False
+    do_status_hook = False
 
     try:
         # Load the JSON data from the request
@@ -317,16 +334,35 @@ def alerts_update_route(alert_id, caseid) -> Response:
         for key, value in data.items():
             old_value = getattr(alert, key, None)
 
+            if type(old_value) is int:
+                old_value = str(old_value)
+
+            if type(value) is int:
+                value = str(value)
+
             if old_value != value:
-                activity_data.append(f"\"{key}\" from \"{old_value}\" to \"{value}\"")
+                if key == "alert_resolution_status_id":
+                    do_resolution_hook = True
+                if key == 'alert_status_id':
+                    do_status_hook = True
+
+                activity_data.append(f"\"{key}\"")
 
         # Deserialize the JSON data into an Alert object
         updated_alert = alert_schema.load(data, instance=alert, partial=True)
+        if data.get('alert_owner_id') is None and updated_alert.alert_owner_id is None:
+            updated_alert.alert_owner_id = current_user.id
 
         # Save the changes
         db.session.commit()
 
-        alert = call_modules_hook('on_postload_alert_update', data=alert, caseid=caseid)
+        updated_alert = call_modules_hook('on_postload_alert_update', data=updated_alert, caseid=caseid)
+
+        if do_resolution_hook:
+            updated_alert = call_modules_hook('on_postload_alert_resolution_update', data=updated_alert, caseid=caseid)
+
+        if do_status_hook:
+            updated_alert = call_modules_hook('on_postload_alert_status_update', data=updated_alert, caseid=caseid)
 
         if activity_data:
             track_activity(f"updated alert #{alert_id}: {','.join(activity_data)}", ctx_less=True)
@@ -385,7 +421,11 @@ def alerts_batch_update_route(caseid: int) -> Response:
                 old_value = getattr(alert, key, None)
 
                 if old_value != value:
-                    activity_data.append(f"\"{key}\" from \"{old_value}\" to \"{value}\"")
+                    activity_data.append(f"\"{key}\"")
+
+            # Check if the user has access to the client
+            if not user_has_client_access(current_user.id, alert.alert_customer_id):
+                return response_error('User not entitled to update alerts for the client', status=403)
 
             # Deserialize the JSON data into an Alert object
             alert_schema.load(updates, instance=alert, partial=True)
@@ -432,12 +472,21 @@ def alerts_batch_delete_route(caseid: int) -> Response:
     if not alert_ids:
         return response_error('No alert IDs provided')
 
+    # Check if the user has access to the client
+    for alert_id in alert_ids:
+        alert = get_alert_by_id(alert_id)
+        if not alert:
+            return response_error(f'Alert with ID {alert_id} not found')
+
+        if not user_has_client_access(current_user.id, alert.alert_customer_id):
+            return response_error('User not entitled to delete alerts for the client', status=403)
+
     success, logs = delete_alerts(alert_ids)
 
     if not success:
         return response_error(logs)
     
-    alert = call_modules_hook('on_postload_alert_delete', data=f'{alert_ids: alert_ids}', caseid=caseid)
+    alert = call_modules_hook('on_postload_alert_delete', data=f'alert_ids: {alert_ids}', caseid=caseid)
 
     track_activity(f"deleted alerts #{','.join(str(alert_id) for alert_id in alert_ids)}", ctx_less=True)
 
@@ -463,6 +512,11 @@ def alerts_delete_route(alert_id, caseid) -> Response:
         return response_error('Alert not found')
 
     try:
+
+        # Check if the user has access to the client
+        if not user_has_client_access(current_user.id, alert.alert_customer_id):
+            return response_error('User not entitled to delete alerts for the client', status=403)
+
         # Delete the case association
         delete_similar_alert_cache(alert_id=alert_id)
 
@@ -514,6 +568,10 @@ def alerts_escalate_route(alert_id, caseid) -> Response:
     case_template_id: int = data.get('case_template_id', None)
 
     try:
+        # Check if the user has access to the client
+        if not user_has_client_access(current_user.id, alert.alert_customer_id):
+            return response_error('User not entitled to escalate alerts for the client', status=403)
+
         # Escalate the alert to a case
         alert.alert_status_id = AlertStatus.query.filter_by(status_name='Escalated').first().status_id
         db.session.commit()
@@ -526,7 +584,7 @@ def alerts_escalate_route(alert_id, caseid) -> Response:
         if not case:
             return response_error('Failed to create case from alert')
 
-        ac_set_new_case_access(None, case.case_id)
+        ac_set_new_case_access(None, case.case_id, case.client_id)
 
         case = call_modules_hook('on_postload_case_create', data=case, caseid=caseid)
 
@@ -586,6 +644,14 @@ def alerts_merge_route(alert_id, caseid) -> Response:
     case_tags = data.get('case_tags')
 
     try:
+        # Check if the user has access to the client
+        if not user_has_client_access(current_user.id, alert.alert_customer_id):
+            return response_error('User not entitled to merge alerts for the client', status=403)
+
+        # Check if the user has access to the case
+        if not check_ua_case_client(current_user.id, target_case_id):
+            return response_error('User not entitled to merge alerts for the case', status=403)
+
         # Merge the alert into a case
         alert.alert_status_id = AlertStatus.query.filter_by(status_name='Merged').first().status_id
         db.session.commit()
@@ -597,7 +663,7 @@ def alerts_merge_route(alert_id, caseid) -> Response:
         
         alert = call_modules_hook('on_postload_alert_merge', data=alert, caseid=caseid)
 
-        track_activity(f"merge alert #{alert_id} into existing case #{target_case_id}", ctx_less=True)
+        track_activity(f"merge alert #{alert_id} into existing case #{target_case_id}", caseid=target_case_id)
         add_obj_history_entry(alert, f"Alert merged into existing case #{target_case_id}")
 
         # Return the updated alert as JSON
@@ -638,13 +704,21 @@ def alerts_unmerge_route(alert_id, caseid) -> Response:
         return response_error('Target case not found')
 
     try:
+        # Check if the user has access to the client
+        if not user_has_client_access(current_user.id, alert.alert_customer_id):
+            return response_error('User not entitled to unmerge alerts for the client', status=403)
+
+        # Check if the user has access to the case
+        if not check_ua_case_client(current_user.id, target_case_id):
+            return response_error('User not entitled to unmerge alerts for the case', status=403)
+
         # Unmerge alert from the case
         success, message = unmerge_alert_from_case(alert, case)
 
         if success is False:
             return response_error(message)
 
-        track_activity(f"unmerge alert #{alert_id} from case #{target_case_id}", ctx_less=True)
+        track_activity(f"unmerge alert #{alert_id} from case #{target_case_id}", caseid=target_case_id)
         add_obj_history_entry(alert, f"Alert unmerged from case #{target_case_id}")
 
         alert = call_modules_hook('on_postload_alert_unmerge', data=alert, caseid=caseid)
@@ -692,6 +766,10 @@ def alerts_batch_merge_route(caseid) -> Response:
     import_as_event: bool = data.get('import_as_event')
     case_tags = data.get('case_tags')
 
+    # Check if the user has access to the case
+    if not check_ua_case_client(current_user.id, target_case_id):
+        return response_error('User not entitled to merge alerts for the case', status=403)
+
     try:
         # Merge the alerts into a case
         for alert_id in alert_ids.split(','):
@@ -700,6 +778,10 @@ def alerts_batch_merge_route(caseid) -> Response:
             alert = get_alert_by_id(alert_id)
             if not alert:
                 continue
+
+            # Check if the user has access to the client
+            if not user_has_client_access(current_user.id, alert.alert_customer_id):
+                return response_error('User not entitled to merge alerts for the client', status=403)
 
             alert.alert_status_id = AlertStatus.query.filter_by(status_name='Merged').first().status_id
             db.session.commit()
@@ -717,7 +799,7 @@ def alerts_batch_merge_route(caseid) -> Response:
             db.session.commit()
 
         track_activity(f"batched merge alerts {alert_ids} into existing case #{target_case_id}",
-                       ctx_less=True)
+                       caseid=target_case_id)
 
         # Return the updated case as JSON
         return response_success(data=CaseSchema().dump(case))
@@ -756,6 +838,7 @@ def alerts_batch_escalate_route(caseid) -> Response:
     case_tags = data.get('case_tags')
     case_title = data.get('case_title')
     alerts_list = []
+    case_template_id: int = data.get('case_template_id', None)
 
     try:
         # Merge the alerts into a case
@@ -766,6 +849,10 @@ def alerts_batch_escalate_route(caseid) -> Response:
             if not alert:
                 continue
 
+            # Check if the user has access to the client
+            if not user_has_client_access(current_user.id, alert.alert_customer_id):
+                return response_error('User not entitled to escalate alerts for the client', status=403)
+
             alert.alert_status_id = AlertStatus.query.filter_by(status_name='Merged').first().status_id
             db.session.commit()
             alert = call_modules_hook('on_postload_alert_merge', data=alert, caseid=caseid)
@@ -775,18 +862,18 @@ def alerts_batch_escalate_route(caseid) -> Response:
         # Merge alerts in the case
         case = create_case_from_alerts(alerts_list, iocs_list=iocs_import_list, assets_list=assets_import_list,
                                        note=note, import_as_event=import_as_event, case_tags=case_tags,
-                                       case_title=case_title)
+                                       case_title=case_title, template_id=case_template_id)
 
         if not case:
             return response_error('Failed to create case from alert')
 
-        ac_set_new_case_access(None, case.case_id)
+        ac_set_new_case_access(None, case.case_id, case.client_id)
 
         case = call_modules_hook('on_postload_case_create', data=case, caseid=caseid)
 
         add_obj_history_entry(case, 'created')
         track_activity("new case {case_name} created from alerts".format(case_name=case.name),
-                       ctx_less=True)
+                       caseid=case.case_id)
 
         for alert in alerts_list:
             add_obj_history_entry(alert, f"Alert escalated into new case #{case.case_id}")
@@ -840,6 +927,9 @@ def alert_comment_modal(cur_id, caseid, url_redir):
     if not alert:
         return response_error('Invalid alert ID')
 
+    if not user_has_client_access(current_user.id, alert.alert_customer_id):
+        return response_error('User not entitled to update alerts for the client', status=403)
+
     return render_template("modal_conversation.html", element_id=cur_id, element_type='alerts',
                            title=f" alert #{alert.alert_id}")
 
@@ -857,6 +947,13 @@ def alert_comments_get(alert_id, caseid):
     returns:
         Response: The response
     """
+    # Check if the user has access to the client
+    alert = get_alert_by_id(alert_id)
+    if not alert:
+        return response_error('Invalid alert ID')
+
+    if not user_has_client_access(current_user.id, alert.alert_customer_id):
+        return response_error('User not entitled to read alerts for the client', status=403)
 
     alert_comments = get_alert_comments(alert_id)
     if alert_comments is None:
@@ -879,6 +976,13 @@ def alert_comment_delete(alert_id, com_id, caseid):
     returns:
         Response: The response
     """
+    # Check if the user has access to the client
+    alert = get_alert_by_id(alert_id)
+    if not alert:
+        return response_error('Invalid alert ID')
+
+    if not user_has_client_access(current_user.id, alert.alert_customer_id):
+        return response_error('User not entitled to read alerts for the client', status=403)
 
     success, msg = delete_alert_comment(comment_id=com_id, alert_id=alert_id)
     if not success:
@@ -891,9 +995,9 @@ def alert_comment_delete(alert_id, com_id, caseid):
     return response_success(msg)
 
 
-@alerts_blueprint.route('/alerts/<int:cur_id>/comments/<int:com_id>', methods=['GET'])
+@alerts_blueprint.route('/alerts/<int:alert_id>/comments/<int:com_id>', methods=['GET'])
 @ac_api_requires(Permissions.alerts_read, no_cid_required=True)
-def alert_comment_get(cur_id, com_id, caseid):
+def alert_comment_get(alert_id, com_id, caseid):
     """
     Get a comment for an alert
 
@@ -905,8 +1009,15 @@ def alert_comment_get(cur_id, com_id, caseid):
     returns:
         Response: The response
     """
+    # Check if the user has access to the client
+    alert = get_alert_by_id(alert_id)
+    if not alert:
+        return response_error('Invalid alert ID')
 
-    comment = get_alert_comment(cur_id, com_id)
+    if not user_has_client_access(current_user.id, alert.alert_customer_id):
+        return response_error('User not entitled to read alerts for the client', status=403)
+
+    comment = get_alert_comment(alert_id, com_id)
     if not comment:
         return response_error("Invalid comment ID")
 
@@ -927,6 +1038,12 @@ def alert_comment_edit(alert_id, com_id, caseid):
     returns:
         Response: The response
     """
+    alert = get_alert_by_id(alert_id)
+    if not alert:
+        return response_error('Invalid alert ID')
+
+    if not user_has_client_access(current_user.id, alert.alert_customer_id):
+        return response_error('User not entitled to read alerts for the client', status=403)
 
     return case_comment_update(com_id, 'events', caseid=None)
 
@@ -949,6 +1066,9 @@ def case_comment_add(alert_id, caseid):
         alert = get_alert_by_id(alert_id=alert_id)
         if not alert:
             return response_error('Invalid alert ID')
+
+        if not user_has_client_access(current_user.id, alert.alert_customer_id):
+            return response_error('User not entitled to read alerts for the client', status=403)
 
         comment_schema = CommentSchema()
 

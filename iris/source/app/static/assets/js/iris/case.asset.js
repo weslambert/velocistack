@@ -23,7 +23,7 @@ function edit_in_asset_desc() {
 }
 
 /* Fetch a modal that is compatible with the requested asset type */
-function add_asset() {
+function add_assets() {
     url = 'assets/add/modal' + case_param();
     $('#modal_add_asset_content').load(url, function (response, status, xhr) {
         hide_minimized_modal_box();
@@ -40,57 +40,70 @@ function add_asset() {
         g_asset_desc_editor.setOption("minLines", "10");
         edit_in_asset_desc();
 
-        headers = get_editor_headers('g_asset_desc_editor', null, 'asset_edition_btn');
+        let headers = get_editor_headers('g_asset_desc_editor', null, 'asset_edition_btn');
         $('#asset_edition_btn').append(headers);
 
         $('#ioc_links').select2({});
 
-        $('#submit_new_asset').on("click", function () {
-            if(!$('form#form_new_asset').valid()) {
-                return false;
-            }
+        $('#submit_new_assets').on("click", function () {
 
-            var data = $('#form_new_asset').serializeObject();
-            data['csrf_token'] = $('#csrf_token').val();
-            if (typeof data["ioc_links"] == "string") {
-                data["ioc_links"] = [data["ioc_links"]]
-            }
-            data['asset_tags'] = $('#asset_tags').val();
-            data['asset_description'] = g_asset_desc_editor.getValue();
-            ret = get_custom_attributes_fields();
-            has_error = ret[0].length > 0;
-            attributes = ret[1];
+            let assets = $('#assets_name').val();
+            let assets_list = assets.split('\n');
+            for (let index in assets_list) {
 
-            if (has_error){return false;}
+                let data = $('#form_new_assets').serializeObject();
+                data['asset_name'] = assets_list[index];
+                delete data['assets_name'];
 
-            data['custom_attributes'] = attributes;
-
-            post_request_api('assets/add', JSON.stringify(data), true, function() {
-                    $('#submit_new_asset').text('Saving data..')
-                    .attr("disabled", true)
-                    .removeClass('bt-outline-success')
-                    .addClass('btn-success', 'text-dark');
-            })
-            .done((data) => {
-                if (data.status == 'success') {
-                    reload_assets();
-                    $('#modal_add_asset').modal('hide');
-                    notify_success("Asset created");
-                } else {
-                    $('#submit_new_asset').text('Save again');
-                    swal("Oh no !", data.message, "error")
+                if (data['asset_name'] == "" || data['asset_name'] == null || data['asset_name'] == '\n') {
+                    continue;
                 }
-            })
-            .always(function () {
-                $('#submit_new_asset')
-                    .attr("disabled", false)
-                    .addClass('bt-outline-success')
-                    .removeClass('btn-success', 'text-dark');
-            })
-            .fail(function (error) {
-                $('#submit_new_asset').text('Save');
-                propagate_form_api_errors(error.responseJSON.data);
-            })
+
+                data['csrf_token'] = $('#csrf_token').val();
+                if (typeof data["ioc_links"] == "string") {
+                    data["ioc_links"] = [data["ioc_links"]]
+                }
+                data['asset_tags'] = $('#asset_tags').val();
+                data['asset_description'] = g_asset_desc_editor.getValue();
+                let ret = get_custom_attributes_fields();
+                let has_error = ret[0].length > 0;
+                let attributes = ret[1];
+
+                if (has_error) {
+                    return false;
+                }
+
+                data['custom_attributes'] = attributes;
+
+                post_request_api('assets/add', JSON.stringify(data), true, function () {
+                    $('#submit_new_assets').text('Saving data..')
+                        .attr("disabled", true)
+                        .removeClass('bt-outline-success')
+                        .addClass('btn-success', 'text-dark');
+                })
+                    .done((data) => {
+                        if (data.status == 'success') {
+                            reload_assets();
+                            if (index == (assets_list.length - 1)) {
+                                $('#modal_add_asset').modal('hide');
+                                notify_success("Assets created");
+                            }
+                        } else {
+                            $('#submit_new_assets').text('Save again');
+                            swal("Oh no !", data.message, "error")
+                        }
+                    })
+                    .always(function () {
+                        $('#submit_new_assets')
+                            .attr("disabled", false)
+                            .addClass('bt-outline-success')
+                            .removeClass('btn-success', 'text-dark');
+                    })
+                    .fail(function (error) {
+                        $('#submit_new_assets').text('Save');
+                        propagate_form_api_errors(error.responseJSON.data);
+                    })
+            }
 
             return false;
         })
@@ -121,12 +134,18 @@ function get_case_assets() {
                 Table.rows.add(jsdata.assets);
                 Table.columns.adjust().draw();
                 load_menu_mod_options('asset', Table, delete_asset);
-
+                $('[data-toggle="popover"]').popover();
                 set_last_state(jsdata.state);
                 hide_loader();
                 Table.responsive.recalc();
 
-                $('[data-toggle="popover"]').popover({html: true, container: 'body'});
+                $(document)
+                    .off('click', '.asset_details_link')
+                    .on('click', '.asset_details_link', function(event) {
+                    event.preventDefault();
+                    let asset_id = $(this).data('asset_id');
+                    asset_details(asset_id);
+                });
 
             } else {
                 Table.clear().draw();
@@ -177,6 +196,7 @@ function asset_details(asset_id) {
         g_asset_desc_editor.setOption("minLines", "10");
         preview_asset_description(true);
         headers = get_editor_headers('g_asset_desc_editor', null, 'asset_edition_btn');
+
         $('#asset_edition_btn').append(headers);
 
         $('#ioc_links').select2({});
@@ -189,9 +209,12 @@ function asset_details(asset_id) {
 
         load_menu_mod_options_modal(asset_id, 'asset', $("#asset_modal_quick_actions"));
         $('.dtr-modal').hide();
+
+        $('#modal_add_asset').modal({ show: true });
+        edit_in_asset_desc();
     });
 
-    $('#modal_add_asset').modal({ show: true });
+
     return false;
 }
 
@@ -331,55 +354,68 @@ $(document).ready(function(){
             "data": "asset_name",
             "className": "dt-nowrap",
             "render": function (data, type, row, meta) {
-              if (type === 'display' || type === 'filter' || type === 'sort' || type === 'export') {
-                if (row['asset_domain']) {
-                    datak = sanitizeHTML(row['asset_domain'])+"\\"+ sanitizeHTML(data);
-                } else {
-                    datak = sanitizeHTML(data);
-                }
+                  if (type === 'display' || type === 'filter' || type === 'sort' || type === 'export') {
 
-                if (data.length > 60) {
-                    datak = data.slice(0, 60) + " (..)";
-                }
-                if (isWhiteSpace(data)) {
-                    datak = '#' + row['asset_id'];
-                }
-                share_link = buildShareLink(row['asset_id']);
-                if (row['asset_compromise_status_id'] == 1) {
-                    src_icon = row['asset_icon_compromised'];
-                } else {
-                    src_icon = row['asset_icon_not_compromised'];
-                }
-                ret = '<img class="mr-2" title="'+ sanitizeHTML(row['asset_type']) +'" style="width:1.5em;height:1.5em" src=\'/static/assets/img/graph/' + src_icon +
-                '\'> <a href="' + share_link + '" data-selector="true" title="Asset ID #'+ row['asset_id'] +
-                '" onclick="asset_details(\'' + row['asset_id'] + '\');return false;">' + datak +'</a>';
+                    // Create container element
+                    const container = document.createElement('div');
 
-                if (row.link.length > 0) {
-                    var has_compro = false;
-                    var datacontent = 'data-content="';
-                    for (idx in row.link) {
-                        if (row.link[idx]['asset_compromise_status_id'] == 1) {
-                            has_compro = true;
-                            datacontent += `<b><a target='_blank' rel='noopener' href='/case/assets?cid=${row.link[idx]['case_id']}&shared=${row.link[idx]['asset_id']}'>Observed <sup><i class='fa-solid fa-arrow-up-right-from-square ml-1 mr-1 text-muted'></i></sup></a></b> as <b class='text-danger'>compromised</b><br/> on <b><a href='/case?cid=${row.link[idx]['case_id']}'>case #${row.link[idx]['case_id']} <sup><i class='fa-solid fa-arrow-up-right-from-square ml-1 mr-1 text-muted'></i></sup></a></a></b> (${row.link[idx]['case_open_date'].replace('00:00:00 GMT', '')}) for the same customer.<br/><br/>`;
-                        } else {
-
-                            datacontent += `<b><a target='_blank' rel='noopener' href='/case/assets?cid=${row.link[idx]['case_id']}&shared=${row.link[idx]['asset_id']}'>Observed <sup><i class='fa-solid fa-arrow-up-right-from-square ml-1 mr-1 text-muted'></i></sup></a></b> as <b class='text-success'>not compromised</b><br/> on <b><a href='/case?cid=${row.link[idx]['case_id']}'>case #${row.link[idx]['case_id']} <sup><i class='fa-solid fa-arrow-up-right-from-square ml-1 mr-1 text-muted'></i></sup></a></a></b> (${row.link[idx]['case_open_date'].replace('00:00:00 GMT', '')}) for the same customer.<br/><br/>`;
-                        }
-                    }
-                    if (has_compro) {
-                       ret += `<a tabindex="0" class="fas fa-meteor ml-2 text-danger" style="cursor: pointer;" data-html="true"
-                            data-toggle="popover" data-trigger="focus" title="Observed in previous case" `;
+                    let datak = "";
+                    if (row['asset_domain']) {
+                        datak = row['asset_domain'] + "\\" + data;
                     } else {
-                        ret += `<a tabindex="0" class="fas fa-info-circle ml-2 text-success" style="cursor: pointer;" data-html="true"
-                        data-toggle="popover" data-trigger="focus" title="Observed in previous case" `;
+                        datak = data;
+                    }
+                    if (data.length > 60) {
+                        datak = data.slice(0, 60) + " (..)";
+                    }
+                    if (isWhiteSpace(data)) {
+                        datak = '#' + row['asset_id'];
                     }
 
-                    ret += datacontent;
-                    ret += '"></i>';
+                    let compro = "";
+
+                    if (row.link.length > 0) {
+                        let has_compro = false;
+                        let datacontent = 'data-content="';
+                        for (let idx in row.link) {
+                            if (row.link[idx]['asset_compromise_status_id'] === 1) {
+                                has_compro = true;
+                                datacontent += `<b><a target='_blank' rel='noopener' href='/case/assets?cid=${row.link[idx]['case_id']}&shared=${row.link[idx]['asset_id']}'>Observed <sup><i class='fa-solid fa-arrow-up-right-from-square ml-1 mr-1 text-muted'></i></sup></a></b> as <b class='text-danger'>compromised</b><br/> on <b><a href='/case?cid=${row.link[idx]['case_id']}'>case #${row.link[idx]['case_id']} <sup><i class='fa-solid fa-arrow-up-right-from-square ml-1 mr-1 text-muted'></i></sup></a></a></b> (${row.link[idx]['case_open_date'].replace('00:00:00 GMT', '')}) for the same customer.<br/><br/>`;
+                            } else {
+
+                                datacontent += `<b><a target='_blank' rel='noopener' href='/case/assets?cid=${row.link[idx]['case_id']}&shared=${row.link[idx]['asset_id']}'>Observed <sup><i class='fa-solid fa-arrow-up-right-from-square ml-1 mr-1 text-muted'></i></sup></a></b> as <b class='text-success'>not compromised</b><br/> on <b><a href='/case?cid=${row.link[idx]['case_id']}'>case #${row.link[idx]['case_id']} <sup><i class='fa-solid fa-arrow-up-right-from-square ml-1 mr-1 text-muted'></i></sup></a></a></b> (${row.link[idx]['case_open_date'].replace('00:00:00 GMT', '')}) for the same customer.<br/><br/>`;
+                            }
+                        }
+                        if (has_compro) {
+                           compro += `<a tabindex="0" class="fas fa-meteor ml-2 text-danger" style="cursor: pointer;" data-html="true"
+                                data-toggle="popover" data-trigger="focus" title="Observed in previous case" `;
+                        } else {
+                            compro += `<a tabindex="0" class="fas fa-info-circle ml-2 text-success" style="cursor: pointer;" data-html="true"
+                            data-toggle="popover" data-trigger="focus" title="Observed in previous case" `;
+                        }
+
+                        compro += datacontent;
+                        compro += '"></i>';
+                    }
+
+                    let img = $('<img>')
+                        .addClass('mr-2')
+                        .css({width: '1.5em', height: '1.5em'})
+                        .attr('src', '/static/assets/img/graph/' + (row['asset_compromise_status_id'] == 1 ? row['asset_icon_compromised'] : row['asset_icon_not_compromised']))
+                        .attr('title', row['asset_type']);
+
+                    let link = $('<a>')
+                        .attr('href', 'javascript:void(0);')
+                        .attr('data-asset_id', row['asset_id'])
+                        .attr('title', 'Asset ID #' + row['asset_id'])
+                        .addClass('asset_details_link')
+                        .text(datak);
+
+                    let con = $('<div>').append(img, link);
+
+                    return con.html() + compro;
                 }
-                return ret;
-              }
-              return data;
+                return data;
             }
           },
           {
@@ -392,22 +428,16 @@ $(document).ready(function(){
           { "data": "asset_description",
            "render": function (data, type, row, meta) {
               if (type === 'display' && data != null) {
-                data = sanitizeHTML(data);
-                datas = '<span data-toggle="popover-click-close" style="cursor: pointer;" title="Info" data-trigger="hover" href="#" data-content="' + data + '">' + data.slice(0, 70);
-
-                if (data.length > 70) {
-                    datas += ' (..)</span>';
-                } else {
-                    datas += '</span>';
-                }
-                return datas;
+                  return ret_obj_dt_description(data);
               }
               return data;
             }
           },
           { "data": "asset_ip",
              "render": function (data, type, row, meta) {
-                if (type === 'display') { data = sanitizeHTML(data);}
+                if (type === 'display'  && data != null) {
+                    return ret_obj_dt_description(data);
+                }
                 return data;
               }
           },
@@ -424,9 +454,9 @@ $(document).ready(function(){
             "data": "ioc_links",
             "render": function (data, type, row, meta) {
                 if ((type === 'filter' || type === 'display') && data != null) {
-                    datas = "";
+                    let datas = "";
                     for (ds in data) {
-                        datas += '<span class="badge badge-light">' + sanitizeHTML(data[ds]['ioc_value']) + '</span>';
+                        datas += get_ioc_tag_from_data(data[ds]['ioc_value'], 'badge badge-light ml-2');
                     }
                     return datas;
                 } else if (type === 'export' && data != null) {
@@ -439,10 +469,10 @@ $(document).ready(function(){
           { "data": "asset_tags",
             "render": function (data, type, row, meta) {
               if (type === 'display' && data != null  ) {
-                  tags = "";
-                  de = data.split(',');
-                  for (tag in de) {
-                    tags += '<span class="badge badge-light ml-2">' + sanitizeHTML(de[tag]) + '</span>';
+                  let tags = "";
+                  let de = data.split(',');
+                  for (let tag in de) {
+                      tags += get_tag_from_data(de[tag], 'badge badge-light ml-2');
                   }
                   return tags;
               }

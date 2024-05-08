@@ -170,6 +170,7 @@ function edit_task(id) {
 
         load_menu_mod_options_modal(id, 'task', $("#task_modal_quick_actions"));
         $('#modal_add_task').modal({show:true});
+        edit_in_task_desc();
   });
 }
 
@@ -242,6 +243,14 @@ function get_tasks() {
                 $('[data-toggle="popover"]').popover();
                 Table.responsive.recalc();
 
+                $(document)
+                    .off('click', '.task_details_link')
+                    .on('click', '.task_details_link', function(event) {
+                    event.preventDefault();
+                    let task_id = $(this).data('task_id');
+                    edit_task(task_id);
+                });
+
                 set_last_state(data.data.state);
                 hide_loader();
             }
@@ -274,9 +283,11 @@ function do_list_users(list_users, cur_assignees_id_list) {
         title: "Select assignee(s)"
     });
 
-    for (user in list_users) {
-        $('#task_assignees_id').append(new Option(`${list_users[user].user_login} (${list_users[user].user_name})`,
-                                                    list_users[user].user_id));
+    for (let user in list_users) {
+        if (list_users[user].user_access_level === 4) {
+            $('#task_assignees_id').append(new Option(`${filterXSS(list_users[user].user_login)} (${filterXSS(list_users[user].user_name)})`,
+                list_users[user].user_id));
+        }
     }
 
     if (cur_assignees_id_list !== undefined) {
@@ -317,13 +328,22 @@ $(document).ready(function(){
             "render": function (data, type, row, meta) {
               if (type === 'display' && data != null) {
 
+                let datak = '';
+                let anchor = $('<a>')
+                    .attr('href', 'javascript:void(0);')
+                    .attr('data-task_id', row['task_id'])
+                    .attr('title', `Task ID #${row['task_id']} - ${data}`)
+                    .addClass('task_details_link')
+
                 if (isWhiteSpace(data)) {
-                    data = '#' + row['task_id'];
+                    datak = '#' + row['task_id'];
+                    anchor.text(datak);
                 } else {
-                    data = sanitizeHTML(data);
+                    datak= ellipsis_field(data, 64);
+                    anchor.html(datak);
                 }
-                share_link = buildShareLink(row['task_id']);
-                data = '<a href="'+ share_link + '" data-selector="true" title="Task ID #'+ row['task_id'] +'"  onclick="edit_task(\'' + row['task_id'] + '\');return false;">' + data +'</a>';
+
+                return anchor.prop('outerHTML');
               }
               return data;
             }
@@ -331,15 +351,7 @@ $(document).ready(function(){
           { "data": "task_description",
            "render": function (data, type, row, meta) {
               if (type === 'display') {
-                data = sanitizeHTML(data);
-                datas = '<span data-toggle="popover" style="cursor: pointer;" title="Info" data-trigger="hover" href="#" data-content="' + data + '">' + data.slice(0, 70);
-
-                if (data.length > 70) {
-                    datas += ' (..)</span>';
-                } else {
-                    datas += '</span>';
-                }
-                return datas;
+                  return ret_obj_dt_description(data);
               }
               return data;
             }
@@ -395,17 +407,22 @@ $(document).ready(function(){
           },
           {
             "data": "task_open_date",
-            "render": function (data, type, row, meta) { return sanitizeHTML(data);}
+            "render": function (data, type, row, meta) {
+                if (type === 'display' && data != null) {
+                    return formatTime(data);
+                }
+                return data;
+            }
           },
           { "data": "task_tags",
             "render": function (data, type, row, meta) {
               if (type === 'display' && data != null) {
-                  tags = "";
-                  de = data.split(',');
-                  for (tag in de) {
-                    tags += '<span class="badge badge-primary ml-2">' + sanitizeHTML(de[tag]) + '</span>';
-                  }
-                  return tags;
+                  let datas = "";
+                  let de = data.split(',');
+                  for (let tag in de) {
+                    datas += get_tag_from_data(de[tag], 'badge badge-light ml-2');
+                }
+                return datas;
               }
               return data;
             }

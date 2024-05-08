@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -51,7 +49,7 @@ def set_ctx():
     :return: Page
     """
     if not current_user.is_authenticated:
-        return redirect(not_authenticated_redirection_url())
+        return redirect(not_authenticated_redirection_url(request.full_path))
 
     ctx = request.form.get('ctx')
     ctx_h = request.form.get('ctx_h')
@@ -81,21 +79,10 @@ def has_updates():
     return dict(has_updates=False)
 
 
-@ctx_blueprint.route('/context/get-cases/<int:max_results>', methods=['GET'])
-@ac_api_requires(no_cid_required=True)
-def cases_context(max_results,  caseid):
-    # Get all investigations not closed
-    datao = ctx_get_user_cases(current_user.id, max_results=max_results)
-
-    return response_success(data=datao)
-
-
 @ctx_blueprint.route('/context/search-cases', methods=['GET'])
 @ac_api_requires(no_cid_required=True)
 def cases_context_search(caseid):
     search = request.args.get('q')
-    if not search:
-        return response_success(data=[])
 
     # Get all investigations not closed
     datao = ctx_search_user_cases(search, current_user.id, max_results=100)

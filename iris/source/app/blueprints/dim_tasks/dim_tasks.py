@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-#
-#
 #  IRIS Source Code
 #  Copyright (C) 2021 - Airbus CyberSecurity (SAS)
 #  ir@cyberactionlab.net
@@ -45,6 +42,7 @@ from app.models import IrisHook
 from app.models import IrisModule
 from app.models import IrisModuleHook
 from app.models import Notes
+from app.models.alerts import Alert
 from app.models.authorization import CaseAccessLevel
 from app.models.authorization import Permissions
 from app.util import ac_api_case_requires
@@ -79,17 +77,17 @@ def dim_index(caseid: int, url_redir):
 @dim_tasks_blueprint.route('/dim/hooks/options/<hook_type>/list', methods=['GET'])
 @ac_api_requires()
 def list_dim_hook_options_ioc(hook_type, caseid):
-    mods_options = IrisModuleHook.query.with_entities(
+    mods_options = (IrisModuleHook.query.with_entities(
         IrisModuleHook.manual_hook_ui_name,
         IrisHook.hook_name,
         IrisModule.module_name
     ).filter(
         IrisHook.hook_name == f"on_manual_trigger_{hook_type}",
         IrisModule.is_active == True
-    ).join(
-        IrisModuleHook.module,
-        IrisModuleHook.hook
-    ).all()
+    )
+    .join(IrisHook, IrisHook.id == IrisModuleHook.hook_id)
+    .join(IrisModule, IrisModule.id == IrisModuleHook.module_id)
+    .all())
 
     data = [options._asdict() for options in mods_options]
 
@@ -101,8 +99,6 @@ def list_dim_hook_options_ioc(hook_type, caseid):
 def dim_hooks_call(caseid):
     logs = []
     js_data = request.json
-
-    print(js_data)
 
     if not js_data:
         return response_error('Invalid data')
@@ -126,7 +122,15 @@ def dim_hooks_call(caseid):
     index = 0
     obj_targets = []
     for target in js_data.get('targets'):
-        obj = None
+        if type(target) == str:
+            try:
+                target = int(target)
+            except ValueError:
+                return response_error('Invalid target')
+
+        elif type(target) != int:
+            return response_error('Invalid target')
+
         if data_type == 'ioc':
             obj = Ioc.query.filter(Ioc.ioc_id == target).first()
 
@@ -166,6 +170,11 @@ def dim_hooks_call(caseid):
         elif data_type == "global_task":
             obj = GlobalTasks.query.filter(
                 GlobalTasks.id == target
+            ).first()
+
+        elif data_type == 'alert':
+            obj = Alert.query.filter(
+                Alert.alert_id == target
             ).first()
 
         else:

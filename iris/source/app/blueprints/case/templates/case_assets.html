@@ -11,7 +11,7 @@
     <div class="content">
         {% if current_user.is_authenticated %}
         {{ form.hidden_tag() }}
-        <nav class="navbar navbar-header navbar-expand-lg pt-2 pb-2 bg-primary-gradient">
+        <nav class="navbar navbar-header navbar-expand-lg pt-2 pb-2 bg-case-gradient nav-sticky">
                 <div class="container-fluid">
                     <div class="collapse" id="search-nav">
                         <div id="tables_button"></div>
@@ -27,8 +27,8 @@
                             </button>
                         </li>
                         <li class="nav-item">
-                            <button class="btn btn-dark btn-sm" onclick="add_asset();">
-                                <span class="menu-title">Add asset</span>
+                            <button class="btn btn-dark btn-sm" onclick="add_assets();">
+                                <span class="menu-title">Add assets</span>
                             </button>
                         </li>
                         <li class="nav-item">
@@ -36,8 +36,9 @@
                               <button class="btn btn-sm btn-border btn-black" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                   <span class="menu-title"><i class="fas fa-ellipsis-v"></i></span>
                               </button>
-                              <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                                <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
                                 <a class="dropdown-item" href="#" onclick="fire_upload_assets();">Upload CSV of assets</a>
+
                               </div>
                             </div>
                         </li>
