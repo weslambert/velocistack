@@ -11,7 +11,7 @@ done
 docker compose --profile "elastic" --profile "intelowl" --profile "iris" build
 
 # Start everything up
-docker compose --profile "elastic" --profile "intelowl" --profile "iris" up -d
+docker compose --profile "elastic" --profile "intelowl" --profile "iris" --profile "grafana" --profile "prometheus" up -d
 
 #### Don't configure IRIS module for now
 # Sleep for a minute
