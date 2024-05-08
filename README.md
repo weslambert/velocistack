@@ -58,6 +58,8 @@ git clone https://github.com/weslambert/velocistack && cd velocistack
 ### Run the installer script
 `sudo ./install_velocistack`
 
+NOTE: It may take 10-15 minutes or more for all services to be online, depending on your network bandwidth and system resources.
+
 ### Authentication
 Currently, authentication occurs primarily through Velociraptor. It proxies all services, except for IRIS and IntelOwl
 
@@ -102,3 +104,5 @@ Create superuser credentials for IntelOwl by running the following command from 
 
 ### Troubleshooting
 If you experience an error with `cadvisor` and `/var/lib/docker`, try replacing the volume with `/var/snap/docker/common/var-lib-docker/` (for Docker installs that have occurred via `snap`).
+
+Issues with specific services can potentially be identified using `docker logs $container_name`.
