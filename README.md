@@ -76,7 +76,7 @@ Currently, authentication occurs primarily through Velociraptor. It proxies all 
 #### IntelOwl credentials:
 Create superuser credentials for IntelOwl by running the following command from the CLI:
 
-`sudo docker exec -ti uwsgi python3 manage.py createsuperuser`
+`sudo docker exec -ti uwsgi python3 manage.py migrate && sudo docker exec -ti uwsgi python3 manage.py createsuperuser`
 
 
 ### Web Access
